@@ -181,6 +181,10 @@ class NorrklangMediaLibraryService : MediaLibraryService() {
         // the seek-bar duration comes from MediaMetadata.durationMs.
         val extractorsFactory = DefaultExtractorsFactory()
             .setConstantBitrateSeekingAlwaysEnabled(true)
+        // Radio must not get the "always" flag: the ADTS extractor then
+        // peeks 1000 frames before playing, ~18 s at a live stream's pace.
+        val liveExtractorsFactory = DefaultExtractorsFactory()
+            .setConstantBitrateSeekingEnabled(true)
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
                 MIN_BUFFER_MS,
@@ -203,6 +207,7 @@ class NorrklangMediaLibraryService : MediaLibraryService() {
                         )
                     },
                     extractorsFactory = extractorsFactory,
+                    liveExtractorsFactory = liveExtractorsFactory,
                     loadErrorHandlingPolicy = DefaultLoadErrorHandlingPolicy(LOAD_RETRY_COUNT),
                 ),
             )

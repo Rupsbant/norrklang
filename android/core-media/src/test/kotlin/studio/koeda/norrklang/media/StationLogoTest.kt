@@ -15,7 +15,7 @@ class StationLogoTest {
         """
         assertEquals(
             "https://www.kexp.org/img/ios_152px.png",
-            StationLogo.pickIconUrl(html, "https://www.kexp.org/"),
+            iconUrl(html, "https://www.kexp.org/"),
         )
     }
 
@@ -27,7 +27,7 @@ class StationLogoTest {
         """
         assertEquals(
             "https://somafm.com/logos/400/dronezone400.png",
-            StationLogo.pickIconUrl(html, "https://somafm.com/dronezone/"),
+            iconUrl(html, "https://somafm.com/dronezone/"),
         )
     }
 
@@ -38,7 +38,7 @@ class StationLogoTest {
             <link rel='apple-touch-icon' sizes='180x180' href='/a180.png'>
             <link rel='apple-touch-icon' sizes='120x120' href='/a120.png'>
         """
-        assertEquals("https://x.example/a180.png", StationLogo.pickIconUrl(html, "https://x.example/p"))
+        assertEquals("https://x.example/a180.png", iconUrl(html, "https://x.example/p"))
     }
 
     @Test
@@ -47,9 +47,25 @@ class StationLogoTest {
             <link rel="icon" href="/favicon.ico" sizes="any" />
             <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
             <link rel="icon" href="/favicon.png" type="image/png" sizes="48x48" />
-            <link rel="icon" href="/unknown-size.png" />
         """
-        assertNull(StationLogo.pickIconUrl(html, "https://x.example/"))
+        assertNull(iconUrl(html, "https://x.example/"))
+    }
+
+    @Test
+    fun `a favicon without a declared size is a last resort, to be measured`() {
+        val unsized = """<link rel="icon" type="image/png" href="../radio/assets/img/Logo.png">"""
+        // The href climbs above the root, as browsers tolerate.
+        assertEquals(
+            StationLogo.Icon("https://x.example/radio/assets/img/Logo.png", measure = true),
+            StationLogo.pickIcon(unsized, "https://x.example/"),
+        )
+        assertEquals(
+            StationLogo.Icon("https://x.example/big.png", measure = false),
+            StationLogo.pickIcon(
+                unsized + """<link rel="icon" href="/big.png" sizes="192x192">""",
+                "https://x.example/",
+            ),
+        )
     }
 
     @Test
@@ -58,18 +74,20 @@ class StationLogoTest {
             <link rel="icon" href="/big.png" sizes="192x192" />
             <meta name="og:image" content="/share.jpg?v=2">
         """
-        assertEquals("https://x.example/share.jpg?v=2", StationLogo.pickIconUrl(html, "https://x.example/"))
+        assertEquals("https://x.example/share.jpg?v=2", iconUrl(html, "https://x.example/"))
         assertEquals(
             "https://x.example/big.png",
-            StationLogo.pickIconUrl("""<link rel="icon" href="/big.png" sizes="192x192">""", "https://x.example/"),
+            iconUrl("""<link rel="icon" href="/big.png" sizes="192x192">""", "https://x.example/"),
         )
     }
 
     @Test
     fun `garbage page urls and non-http icons are ignored`() {
-        assertNull(StationLogo.pickIconUrl("""<link rel="apple-touch-icon" href="/a.png">""", "not a url"))
+        assertNull(iconUrl("""<link rel="apple-touch-icon" href="/a.png">""", "not a url"))
         assertNull(
-            StationLogo.pickIconUrl("""<link rel="apple-touch-icon" href="data:image/png;base64,AAAA">""", "https://x.example/"),
+            iconUrl("""<link rel="apple-touch-icon" href="data:image/png;base64,AAAA">""", "https://x.example/"),
         )
     }
+
+    private fun iconUrl(html: String, pageUrl: String): String? = StationLogo.pickIcon(html, pageUrl)?.url
 }

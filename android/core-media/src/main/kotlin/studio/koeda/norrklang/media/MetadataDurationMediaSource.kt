@@ -42,16 +42,18 @@ import androidx.media3.extractor.SeekMap
  *  - the timeline window gets it too (source level), which keeps the seek
  *    bar even when the period never sees that seek map (ICY streams).
  *
- * Items without a known duration (radio) go through the default factory.
+ * Items without a known duration (radio) go through the default factory
+ * with [liveExtractorsFactory].
  */
 @UnstableApi
 internal class MetadataDurationMediaSourceFactory(
     private val dataSourceFactory: DataSource.Factory,
     private val extractorsFactory: ExtractorsFactory,
+    liveExtractorsFactory: ExtractorsFactory,
     private var loadErrorHandlingPolicy: LoadErrorHandlingPolicy,
 ) : MediaSource.Factory {
 
-    private val delegate = DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory)
+    private val delegate = DefaultMediaSourceFactory(dataSourceFactory, liveExtractorsFactory)
         .setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
     private var drmSessionManagerProvider: DrmSessionManagerProvider? = null
 

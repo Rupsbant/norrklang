@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow semver (`norrklang.version` in `android/gradle.properties`
 is the single source of truth).
 
+## [Unreleased]
+
+### Fixed
+
+- Some AAC radio stations took about 19 seconds to start (#11).
+- Station logos were missing when the homepage icon declares no size or
+  the homepage redirects from `http://` to `https://`.
+
 ## [1.3.0] — 2026-09-25
 
 ### Added
