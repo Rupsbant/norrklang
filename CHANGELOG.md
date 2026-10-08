@@ -7,8 +7,14 @@ is the single source of truth).
 
 ## [Unreleased]
 
+### Changed
+
+- Next and previous switch radio station, in Radio list order (#12).
+- A radio stream that ends reconnects instead of stopping.
+
 ### Fixed
 
+- Skipping past an item that failed to play left playback stopped.
 - Some AAC radio stations took about 19 seconds to start (#11).
 - Station logos were missing when the homepage icon declares no size or
   the homepage redirects from `http://` to `https://`.

@@ -221,7 +221,7 @@ internal open class FakePlayer : Player {
     override fun addMediaItems(index: Int, mediaItems: MutableList<MediaItem>) = error("unused")
     override fun moveMediaItem(currentIndex: Int, newIndex: Int) = error("unused")
     override fun moveMediaItems(fromIndex: Int, toIndex: Int, newIndex: Int) = error("unused")
-    override fun replaceMediaItem(index: Int, mediaItem: MediaItem) = error("unused")
+    override fun replaceMediaItem(index: Int, mediaItem: MediaItem): Unit = error("unused")
     override fun replaceMediaItems(
         fromIndex: Int,
         toIndex: Int,
@@ -241,7 +241,7 @@ internal open class FakePlayer : Player {
     override fun pause(): Unit = error("unused")
     override fun setPlayWhenReady(playWhenReady: Boolean) = error("unused")
     override fun getPlayWhenReady(): Boolean = error("unused")
-    override fun setRepeatMode(repeatMode: Int) = error("unused")
+    override fun setRepeatMode(repeatMode: Int): Unit = error("unused")
     override fun getRepeatMode(): Int = error("unused")
     override fun setShuffleModeEnabled(shuffleModeEnabled: Boolean) = error("unused")
     override fun getShuffleModeEnabled(): Boolean = error("unused")

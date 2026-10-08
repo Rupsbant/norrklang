@@ -107,6 +107,7 @@ class NorrklangMediaLibraryService : MediaLibraryService() {
             tileVersion = { LibraryScope.exclusionKey(settings.excludedLibraryIds.first()) },
             radioPlayStats = { settings.radioPlayStats.first() },
         )
+        val stationQueue = StationQueue(repository, browseTree::playableStation)
         val resumptionLoader = ResumptionQueueLoader(
             settings,
             repository,
@@ -114,7 +115,7 @@ class NorrklangMediaLibraryService : MediaLibraryService() {
             similarMixes,
             bestOfMixes,
             catalogMixes,
-            buildStation = browseTree::playableStation,
+            stationQueue,
         )
         val callback = LibrarySessionCallback(
             context = this,
@@ -124,6 +125,7 @@ class NorrklangMediaLibraryService : MediaLibraryService() {
             savedSongs = savedSongs,
             browseTree = browseTree,
             resumption = resumptionLoader,
+            stationQueue = stationQueue,
             voiceSearch = VoiceSearchResolver(repository, resumptionLoader::containerTracks),
             signInIntent = signInPendingIntent(),
         )
@@ -224,8 +226,14 @@ class NorrklangMediaLibraryService : MediaLibraryService() {
             .build()
         // Preload the next queue item's start so transitions stay gapless on
         // flaky car LTE and manual skip-next starts instantly.
-        exoPlayer.preloadConfiguration =
-            ExoPlayer.PreloadConfiguration(TARGET_PRELOAD_DURATION_US)
+        val trackPreload = ExoPlayer.PreloadConfiguration(TARGET_PRELOAD_DURATION_US)
+        exoPlayer.preloadConfiguration = trackPreload
+        exoPlayer.addListener(
+            StationPlaybackMode(exoPlayer) { preload ->
+                exoPlayer.preloadConfiguration =
+                    if (preload) trackPreload else ExoPlayer.PreloadConfiguration.DEFAULT
+            },
+        )
         return AuthGatePlayer(ShuffleFromCurrentPlayer(exoPlayer)) { error ->
             RadioErrors.present(this, exoPlayer.currentMediaItem, error)
         }

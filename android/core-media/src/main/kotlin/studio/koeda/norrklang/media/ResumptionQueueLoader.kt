@@ -5,7 +5,6 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession.MediaItemsWithStartPosition
 import kotlin.coroutines.cancellation.CancellationException
-import studio.koeda.norrklang.data.model.RadioStation
 import studio.koeda.norrklang.data.model.Track
 import studio.koeda.norrklang.data.repo.MusicRepository
 import studio.koeda.norrklang.data.settings.ServerSettingsRepository
@@ -23,8 +22,8 @@ internal class ResumptionQueueLoader(
     private val similarMixes: SimilarMixesSession,
     private val bestOfMixes: BestOfMixesSession,
     private val catalogMixes: CatalogMixesSession,
+    private val stationQueue: StationQueue,
     private val buildItem: (Track, MediaId.Container?) -> MediaItem = MediaItemFactory::playableTrack,
-    private val buildStation: (RadioStation) -> MediaItem,
 ) {
 
     /** The restored queue, or null when there is nothing (or no way) to restore. */
@@ -44,14 +43,7 @@ internal class ResumptionQueueLoader(
         return try {
             state ?: return null
             val parsed = MediaId.parse(state.mediaId)
-            // A live stream has no position to return to.
-            if (parsed is MediaId.RadioStation) {
-                return MediaItemsWithStartPosition(
-                    listOf(buildStation(repository.radioStation(parsed.id))),
-                    /* startIndex = */ 0,
-                    /* startPositionMs = */ 0L,
-                )
-            }
+            if (parsed is MediaId.RadioStation) return stationQueue.startingAt(parsed.id)
             val id = parsed as? MediaId.Track ?: return null
             val container = id.container
             if (container != null) {

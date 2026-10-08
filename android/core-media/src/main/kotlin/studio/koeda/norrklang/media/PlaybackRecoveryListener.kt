@@ -3,6 +3,7 @@ package studio.koeda.norrklang.media
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
+import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -65,6 +66,17 @@ internal class PlaybackRecoveryListener(
             delay(delayMs)
             retryNow()
         }
+    }
+
+    /**
+     * A failed item leaves the player idle, where a skip only moves the queue
+     * position — prepare so the item skipped to plays (e.g. past a dead station).
+     */
+    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+        if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_SEEK || player.playerError == null) return
+        retryJob?.cancel()
+        attempts = 0
+        player.prepare()
     }
 
     override fun onPlaybackStateChanged(playbackState: Int) {

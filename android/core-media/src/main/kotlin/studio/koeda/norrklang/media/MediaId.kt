@@ -24,7 +24,7 @@ import java.net.URLEncoder
  * artist/{id}
  * album/{id}
  * playlist/{id}
- * station/{id}                    (internet radio station — playable, no queue context)
+ * station/{id}                    (internet radio station — queued with all stations)
  * track/{id}
  * track/{id}|album/{albumId}      (track with queue context)
  * track/{id}|playlist/{plId}
@@ -94,7 +94,7 @@ sealed interface MediaId {
     data class Album(val id: String) : Container
     data class Playlist(val id: String) : Container
 
-    /** An internet radio station: a live stream, played alone — never a queue context. */
+    /** An internet radio station: a live stream, queued with every station ([StationQueue]). */
     data class RadioStation(val id: String) : MediaId
 
     /**

@@ -46,6 +46,7 @@ internal class LibrarySessionCallback(
     private val savedSongs: SavedRadioSongs,
     private val browseTree: BrowseTree,
     private val resumption: ResumptionQueueLoader,
+    private val stationQueue: StationQueue,
     private val voiceSearch: VoiceSearchResolver,
     private val signInIntent: PendingIntent,
 ) : MediaLibrarySession.Callback {
@@ -308,7 +309,8 @@ internal class LibrarySessionCallback(
             )
         }
         // Tapping one track in an album/playlist sends a single item carrying a
-        // container context — rebuild the sibling queue around it.
+        // container context — rebuild the sibling queue around it. A tapped
+        // station likewise plays amid the other stations.
         val single = mediaItems.singleOrNull()?.let { MediaId.parse(it.mediaId) }
         if (single is MediaId.Track && single.container != null) {
             val queue = resumption.containerTracks(single.container)
@@ -318,6 +320,8 @@ internal class LibrarySessionCallback(
                 index,
                 startPositionMs,
             )
+        } else if (single is MediaId.RadioStation) {
+            stationQueue.startingAt(single.id)
         } else {
             val resolved = mediaItems.flatMap { resolve(it) }
             MediaItemsWithStartPosition(

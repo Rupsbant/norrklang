@@ -1,5 +1,6 @@
 package studio.koeda.norrklang.media
 
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -20,20 +21,25 @@ class ResumptionQueueLoaderTest {
         similarMixes = SimilarMixesSession(repository),
         bestOfMixes = BestOfMixesSession(repository),
         catalogMixes = CatalogMixesSession(repository),
+        stationQueue = StationQueue(repository) { station ->
+            MediaItem.Builder().setMediaId(MediaId.RadioStation(station.id).encode()).build()
+        },
         buildItem = { track, container -> MediaItem.Builder().setMediaId(MediaId.Track(track.id, container).encode()).build() },
-        buildStation = { station -> MediaItem.Builder().setMediaId(MediaId.RadioStation(station.id).encode()).build() },
     )
 
     @Test
-    fun `a radio station resumes alone from the live edge`() = runTest {
+    fun `a radio station resumes amid all stations from the live edge`() = runTest {
         val repo = object : FakeMusicRepository() {
-            override suspend fun radioStations() =
-                listOf(RadioStation("rs-1", "KEXP", "https://kexp.example/stream"))
+            override suspend fun radioStations() = listOf(
+                RadioStation("rs-1", "KEXP", "https://kexp.example/stream"),
+                RadioStation("rs-2", "FIP", "https://fip.example/stream"),
+                RadioStation("rs-3", "P3", "https://p3.example/stream"),
+            )
         }
-        val queue = loader(repo).restore(ResumptionState(MediaId.RadioStation("rs-1").encode(), 90_000))!!
-        assertEquals(listOf("station/rs-1"), queue.mediaItems.map { it.mediaId })
-        assertEquals(0, queue.startIndex)
-        assertEquals(0L, queue.startPositionMs)
+        val queue = loader(repo).restore(ResumptionState(MediaId.RadioStation("rs-2").encode(), 90_000))!!
+        assertEquals(listOf("station/rs-1", "station/rs-2", "station/rs-3"), queue.mediaItems.map { it.mediaId })
+        assertEquals(1, queue.startIndex)
+        assertEquals(C.TIME_UNSET, queue.startPositionMs)
     }
 
     @Test
