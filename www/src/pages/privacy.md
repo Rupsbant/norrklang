@@ -40,8 +40,8 @@ All data the app stores stays **on your device**:
   keeps no radio play counts, and none of this is sent to it.
 - **Your settings** — which of your server's music libraries to show,
   whether scrobbling is on, any artists, playlists or libraries you exclude
-  from it, autoplay, and the streaming quality tier for Wi-Fi and for
-  mobile data. Which of the two applies is decided on the device from the
+  from it, autoplay, the radio now-playing layout, and the streaming quality
+  tier for Wi-Fi and for mobile data. Which of the two applies is decided on the device from the
   car's current connection; nothing about the network is sent anywhere.
 - **Caches** — library listings and cover art fetched from your server, kept
   per account. Listings are held in memory only and disappear when the app

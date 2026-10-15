@@ -79,13 +79,16 @@ internal class PlaybackButtonsListener(
 internal data class RadioSong(val station: String, val title: String)
 
 /**
- * The song a station item is playing, or null when the stream's metadata
- * hasn't named one (the title is still the station's own name).
+ * The song a station item is playing — whichever of its two lines isn't the
+ * station's own name (RadioNowPlayingListener decides which line that is) —
+ * or null while the stream hasn't named one.
  */
 internal fun radioSong(item: MediaItem): RadioSong? {
     if (MediaId.parse(item.mediaId) !is MediaId.RadioStation) return null
     val station = item.mediaMetadata.station?.toString()?.trim().orEmpty()
-    val title = item.mediaMetadata.title?.toString()?.trim().orEmpty()
-    if (title.isEmpty() || title.equals(station, ignoreCase = true)) return null
-    return RadioSong(station, title)
+    val song = listOfNotNull(item.mediaMetadata.title, item.mediaMetadata.artist)
+        .map { it.toString().trim() }
+        .firstOrNull { it.isNotEmpty() && !it.equals(station, ignoreCase = true) }
+        ?: return null
+    return RadioSong(station, song)
 }

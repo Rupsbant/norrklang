@@ -74,6 +74,18 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settings.setAutoplaySimilar(enabled) }
     }
 
+    /** See [ServerSettingsRepository.radioStationFirst] — which now-playing line carries the song. */
+    val radioStationFirst: StateFlow<Boolean> = settings.radioStationFirst
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            ServerSettingsRepository.DEFAULT_RADIO_STATION_FIRST,
+        )
+
+    fun setRadioStationFirst(enabled: Boolean) {
+        viewModelScope.launch { settings.setRadioStationFirst(enabled) }
+    }
+
     // --- Libraries ---
 
     /** See [ServerSettingsRepository.excludedLibraryIds] — hidden server libraries. */

@@ -7,6 +7,8 @@ import androidx.media3.common.Player
 import androidx.media3.extractor.metadata.icy.IcyInfo
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.assertSame
 
 class RadioNowPlayingListenerTest {
 
@@ -23,11 +25,15 @@ class RadioNowPlayingListenerTest {
         }
 
         val titles get() = items.map { it.mediaMetadata.title.toString() }
+
+        /** Each item as the car draws it: "title / artist". */
+        val lines get() = items.map { "${it.mediaMetadata.title} / ${it.mediaMetadata.artist}" }
     }
 
+    /** As BrowseTree.playableStation hands it to the player: the name on both lines. */
     private fun station(id: String, name: String) = MediaItem.Builder()
         .setMediaId(MediaId.RadioStation(id).encode())
-        .setMediaMetadata(MediaMetadata.Builder().setTitle(name).setStation(name).build())
+        .setMediaMetadata(MediaMetadata.Builder().setTitle(name).setStation(name).setArtist(name).build())
         .build()
 
     private fun track(id: String, title: String) = MediaItem.Builder()
@@ -52,7 +58,53 @@ class RadioNowPlayingListenerTest {
         val player = QueuePlayer(station("rs-1", "KEXP"), station("rs-2", "FIP")).apply { index = 1 }
         RadioNowPlayingListener(player).onMetadata(icy(" Air - La femme d'argent "))
 
-        assertEquals(listOf("KEXP", "Air - La femme d'argent"), player.titles)
+        assertEquals(listOf("KEXP / KEXP", "Air - La femme d'argent / FIP"), player.lines)
+    }
+
+    @Test
+    fun `station first puts the song on the artist line instead`() {
+        val player = QueuePlayer(station("rs-1", "KEXP"), station("rs-2", "FIP")).apply { index = 1 }
+        val listener = RadioNowPlayingListener(player).apply { stationFirst = true }
+        listener.onMetadata(icy("Air - La femme d'argent"))
+
+        assertEquals(listOf("KEXP / KEXP", "FIP / Air - La femme d'argent"), player.lines)
+    }
+
+    @Test
+    fun `flipping the layout re-lays out the song already playing`() {
+        val player = QueuePlayer(station("rs-1", "KEXP"))
+        val listener = RadioNowPlayingListener(player)
+        listener.onMetadata(icy("Song on KEXP"))
+
+        listener.stationFirst = true
+        assertEquals(listOf("KEXP / Song on KEXP"), player.lines)
+
+        listener.stationFirst = false
+        assertEquals(listOf("Song on KEXP / KEXP"), player.lines)
+    }
+
+    @Test
+    fun `the same song again is not re-issued`() {
+        val player = QueuePlayer(station("rs-1", "KEXP"))
+        val listener = RadioNowPlayingListener(player)
+        listener.onMetadata(icy("Song on KEXP"))
+        val issued = player.items[0]
+        listener.onMetadata(icy("Song on KEXP"))
+
+        assertSame(issued, player.items[0])
+    }
+
+    @Test
+    fun `the heart reads the song from whichever line holds it`() {
+        val player = QueuePlayer(station("rs-1", "KEXP"))
+        val listener = RadioNowPlayingListener(player)
+        assertNull(radioSong(player.items[0]))
+
+        listener.onMetadata(icy("Song on KEXP"))
+        assertEquals(RadioSong("KEXP", "Song on KEXP"), radioSong(player.items[0]))
+
+        listener.stationFirst = true
+        assertEquals(RadioSong("KEXP", "Song on KEXP"), radioSong(player.items[0]))
     }
 
     @Test
@@ -70,7 +122,17 @@ class RadioNowPlayingListenerTest {
         listener.onMetadata(icy("Song on KEXP"))
         listener.skip(player, to = 1)
 
-        assertEquals(listOf("KEXP", "FIP"), player.titles)
+        assertEquals(listOf("KEXP / KEXP", "FIP / FIP"), player.lines)
+    }
+
+    @Test
+    fun `a station left behind with station first gets its own name back too`() {
+        val player = QueuePlayer(station("rs-1", "KEXP"), station("rs-2", "FIP"))
+        val listener = RadioNowPlayingListener(player).apply { stationFirst = true }
+        listener.onMetadata(icy("Song on KEXP"))
+        listener.skip(player, to = 1)
+
+        assertEquals(listOf("KEXP / KEXP", "FIP / FIP"), player.lines)
     }
 
     @Test

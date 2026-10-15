@@ -110,6 +110,7 @@ class ServerSettingsRepository @Inject constructor(
         val QUALITY_WIFI = stringPreferencesKey("stream_quality_wifi")
         val QUALITY_CELLULAR = stringPreferencesKey("stream_quality_cellular")
         val AUTOPLAY_SIMILAR = booleanPreferencesKey("autoplay_similar")
+        val RADIO_STATION_FIRST = booleanPreferencesKey("radio_station_first")
         val SCROBBLE_ENABLED = booleanPreferencesKey("scrobble_enabled")
         val SCROBBLE_EXCLUDED_ARTISTS = stringSetPreferencesKey("scrobble_excluded_artists")
         val SCROBBLE_EXCLUDED_PLAYLISTS = stringSetPreferencesKey("scrobble_excluded_playlists")
@@ -446,6 +447,20 @@ class ServerSettingsRepository @Inject constructor(
         dataStore.edit { it[Keys.AUTOPLAY_SIMILAR] = enabled }
     }
 
+    // --- Radio ---
+
+    /**
+     * Station name on the now-playing title line with the stream's song
+     * beneath it, instead of the song on top (see RadioNowPlayingListener).
+     * Device-wide, like [autoplaySimilar].
+     */
+    val radioStationFirst: Flow<Boolean> =
+        dataStore.data.map { it[Keys.RADIO_STATION_FIRST] ?: DEFAULT_RADIO_STATION_FIRST }
+
+    suspend fun setRadioStationFirst(enabled: Boolean) {
+        dataStore.edit { it[Keys.RADIO_STATION_FIRST] = enabled }
+    }
+
     // --- Libraries ---
 
     /**
@@ -609,6 +624,9 @@ class ServerSettingsRepository @Inject constructor(
     companion object {
         /** Value of [autoplaySimilar] before anything is written. */
         const val DEFAULT_AUTOPLAY_SIMILAR = true
+
+        /** Value of [radioStationFirst] before anything is written. */
+        const val DEFAULT_RADIO_STATION_FIRST = false
 
         /** Stations kept in [radioPlayStats]; the least listened drop off beyond it. */
         const val MAX_RADIO_STATS = 50

@@ -64,6 +64,7 @@ fun SettingsScreen(
     val qualityWifi by viewModel.qualityWifi.collectAsStateWithLifecycle()
     val qualityCellular by viewModel.qualityCellular.collectAsStateWithLifecycle()
     val autoplaySimilar by viewModel.autoplaySimilar.collectAsStateWithLifecycle()
+    val radioStationFirst by viewModel.radioStationFirst.collectAsStateWithLifecycle()
     val scrobble by viewModel.scrobbleSettings.collectAsStateWithLifecycle()
     val librariesSummary by viewModel.librariesSummary.collectAsStateWithLifecycle()
     val savedSongs by viewModel.savedSongs.collectAsStateWithLifecycle()
@@ -240,6 +241,21 @@ fun SettingsScreen(
                     subtitle = stringResource(R.string.settings_scrobble_libraries_hint),
                     excludedCount = scrobble.excludedLibraryIds.size,
                     onClick = { page = SettingsPage.ScrobbleLibraries },
+                )
+                HorizontalDivider()
+                // Which now-playing line carries the stream's song (see
+                // RadioNowPlayingListener); car hosts truncate the top line.
+                SettingsToggleRow(
+                    title = stringResource(R.string.settings_radio_station_first),
+                    subtitle = stringResource(
+                        if (radioStationFirst) {
+                            R.string.settings_radio_station_first_on
+                        } else {
+                            R.string.settings_radio_station_first_off
+                        },
+                    ),
+                    checked = radioStationFirst,
+                    onToggle = viewModel::setRadioStationFirst,
                 )
                 HorizontalDivider()
                 SavedSongsRow(

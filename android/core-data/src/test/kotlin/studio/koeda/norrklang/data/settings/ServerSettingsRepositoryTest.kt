@@ -311,6 +311,17 @@ class ServerSettingsRepositoryTest {
     }
 
     @Test
+    fun `radio station first defaults to false and survives sign-out`() = runTest {
+        val repo = ServerSettingsRepository(dataStore(backgroundScope), FakeCipher())
+        assertEquals(false, repo.radioStationFirst.first())
+
+        repo.save(credentials)
+        repo.setRadioStationFirst(true)
+        repo.clearAccount()
+        assertTrue(repo.radioStationFirst.first())
+    }
+
+    @Test
     fun `resumption state round-trips`() = runTest {
         val repo = ServerSettingsRepository(dataStore(backgroundScope), FakeCipher())
         repo.saveResumptionState("track/42", 90_000L)

@@ -95,7 +95,11 @@ class NorrklangMediaLibraryService : MediaLibraryService() {
         val player = buildPlayer(resolver)
         player.addListener(PlaybackErrorRecorder())
         player.addListener(RandomMixPlaySourceListener(randomMix))
-        player.addListener(RadioNowPlayingListener(player))
+        val radioNowPlaying = RadioNowPlayingListener(player)
+        serviceScope.launch {
+            settings.radioStationFirst.collect { radioNowPlaying.stationFirst = it }
+        }
+        player.addListener(radioNowPlaying)
 
         val browseTree = BrowseTree(
             this,
