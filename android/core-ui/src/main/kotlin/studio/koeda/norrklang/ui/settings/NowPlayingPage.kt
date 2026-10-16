@@ -29,13 +29,19 @@ import studio.koeda.norrklang.ui.components.BackButton
 import studio.koeda.norrklang.ui.theme.LocalFormDimens
 
 /**
- * Picks the line under a playing track's title (see [TrackSubtitle]). Applies
- * at once, the playing queue included.
+ * Now-playing layout sub-page: the line under a song's title (see
+ * [TrackSubtitle]) and which line carries a radio stream's song. Both apply
+ * at once, the playing item included.
+ *
+ * The radio choice is a boolean underneath but is shown as two radio options
+ * so the two sections read the same way.
  */
 @Composable
-internal fun TrackSubtitlePage(
-    selected: TrackSubtitle,
-    onSelected: (TrackSubtitle) -> Unit,
+internal fun NowPlayingPage(
+    trackSubtitle: TrackSubtitle,
+    radioStationFirst: Boolean,
+    onTrackSubtitleSelected: (TrackSubtitle) -> Unit,
+    onRadioStationFirstSelected: (Boolean) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -50,7 +56,7 @@ internal fun TrackSubtitlePage(
         Row(verticalAlignment = Alignment.CenterVertically) {
             BackButton(onBack)
             Text(
-                text = stringResource(R.string.settings_track_subtitle),
+                text = stringResource(R.string.settings_now_playing),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground,
@@ -58,7 +64,7 @@ internal fun TrackSubtitlePage(
             )
         }
         Text(
-            text = stringResource(R.string.settings_track_subtitle_hint),
+            text = stringResource(R.string.settings_now_playing_page_hint),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = dimens.itemSpacing / 2),
@@ -66,21 +72,60 @@ internal fun TrackSubtitlePage(
         Spacer(Modifier.height(dimens.itemSpacing))
         HorizontalDivider()
 
-        Column(modifier = Modifier.selectableGroup()) {
+        Section(title = stringResource(R.string.settings_now_playing_songs)) {
             TrackSubtitle.entries.forEach { subtitle ->
-                TrackSubtitleRow(
-                    subtitle = subtitle,
-                    selected = subtitle == selected,
-                    onSelected = { onSelected(subtitle) },
+                OptionRow(
+                    label = stringResource(subtitle.labelRes()),
+                    hint = stringResource(
+                        if (subtitle == TrackSubtitle.ARTIST) {
+                            R.string.settings_track_subtitle_artist_hint
+                        } else {
+                            R.string.settings_track_subtitle_album_hint
+                        },
+                    ),
+                    selected = subtitle == trackSubtitle,
+                    onSelected = { onTrackSubtitleSelected(subtitle) },
                 )
             }
+        }
+        HorizontalDivider()
+        Section(title = stringResource(R.string.settings_now_playing_radio)) {
+            OptionRow(
+                label = stringResource(R.string.settings_radio_song_first),
+                hint = stringResource(R.string.settings_radio_song_first_hint),
+                selected = !radioStationFirst,
+                onSelected = { onRadioStationFirstSelected(false) },
+            )
+            OptionRow(
+                label = stringResource(R.string.settings_radio_station_first),
+                hint = stringResource(R.string.settings_radio_station_first_hint),
+                selected = radioStationFirst,
+                onSelected = { onRadioStationFirstSelected(true) },
+            )
         }
     }
 }
 
 @Composable
-private fun TrackSubtitleRow(
-    subtitle: TrackSubtitle,
+private fun Section(title: String, options: @Composable () -> Unit) {
+    val dimens = LocalFormDimens.current
+    Column(modifier = Modifier.selectableGroup()) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = dimens.itemSpacing),
+        )
+        options()
+        Spacer(Modifier.height(dimens.itemSpacing / 2))
+    }
+}
+
+@Composable
+private fun OptionRow(
+    label: String,
+    hint: String,
     selected: Boolean,
     onSelected: () -> Unit,
 ) {
@@ -96,18 +141,12 @@ private fun TrackSubtitleRow(
         RadioButton(selected = selected, onClick = null)
         Column(modifier = Modifier.padding(start = dimens.itemSpacing)) {
             Text(
-                text = stringResource(subtitle.labelRes()),
+                text = label,
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Text(
-                text = stringResource(
-                    if (subtitle == TrackSubtitle.ARTIST) {
-                        R.string.settings_track_subtitle_artist_hint
-                    } else {
-                        R.string.settings_track_subtitle_album_hint
-                    },
-                ),
+                text = hint,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

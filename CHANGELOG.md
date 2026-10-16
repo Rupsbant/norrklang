@@ -13,7 +13,7 @@ is the single source of truth).
   Home picks which profile to listen as, with a PIN step for protected
   ones; managed users see the libraries the admin shares with them (#15).
   Switching profile later means signing out and linking again.
-- Settings → Now playing details: show the album next to the artist on the
+- Settings → Now playing: show the album next to the artist on the
   line under a playing song's title, as "Artist · Album" or "Album · Artist",
   for cars that show only two lines (#10). Where supported, tapping that line
   opens the album.
@@ -21,6 +21,8 @@ is the single source of truth).
 ### Changed
 
 - Next and previous switch radio station, in Radio list order (#12).
+- Shorter Settings: play-reporting exclusions moved under one Exceptions
+  row, now-playing layout choices under one Now playing page.
 - A radio stream that ends reconnects instead of stopping.
 
 ### Fixed

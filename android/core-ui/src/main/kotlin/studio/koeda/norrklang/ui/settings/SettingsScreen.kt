@@ -38,10 +38,13 @@ import studio.koeda.norrklang.ui.components.BackButton
 import studio.koeda.norrklang.ui.components.QrCode
 import studio.koeda.norrklang.ui.theme.LocalFormDimens
 
-/** Which page of the settings UI is showing; sub-pages return to [Main]. */
+/**
+ * Which page of the settings UI is showing. Sub-pages return to [Main],
+ * except the three exclusion pickers, which return to [ScrobbleExceptions].
+ */
 private enum class SettingsPage {
-    Main, Libraries, Quality, TrackSubtitle, ScrobbleArtists, ScrobblePlaylists, ScrobbleLibraries, SavedSongs,
-    Diagnostics,
+    Main, Libraries, Quality, NowPlaying, ScrobbleExceptions, ScrobbleArtists, ScrobblePlaylists, ScrobbleLibraries,
+    SavedSongs, Diagnostics,
 }
 
 /**
@@ -123,10 +126,23 @@ fun SettingsScreen(
         )
         return
     }
-    if (page == SettingsPage.TrackSubtitle) {
-        TrackSubtitlePage(
-            selected = trackSubtitle,
-            onSelected = viewModel::setTrackSubtitle,
+    if (page == SettingsPage.NowPlaying) {
+        NowPlayingPage(
+            trackSubtitle = trackSubtitle,
+            radioStationFirst = radioStationFirst,
+            onTrackSubtitleSelected = viewModel::setTrackSubtitle,
+            onRadioStationFirstSelected = viewModel::setRadioStationFirst,
+            onBack = { page = SettingsPage.Main },
+            modifier = modifier,
+        )
+        return
+    }
+    if (page == SettingsPage.ScrobbleExceptions) {
+        ScrobbleExceptionsPage(
+            scrobble = scrobble,
+            onArtists = { page = SettingsPage.ScrobbleArtists },
+            onPlaylists = { page = SettingsPage.ScrobblePlaylists },
+            onLibraries = { page = SettingsPage.ScrobbleLibraries },
             onBack = { page = SettingsPage.Main },
             modifier = modifier,
         )
@@ -137,7 +153,7 @@ fun SettingsScreen(
             page = page,
             viewModel = viewModel,
             scrobble = scrobble,
-            onBack = { page = SettingsPage.Main },
+            onBack = { page = SettingsPage.ScrobbleExceptions },
             modifier = modifier,
         )
         return
@@ -200,13 +216,6 @@ fun SettingsScreen(
                     onClick = { page = SettingsPage.Quality },
                 )
                 HorizontalDivider()
-                // The line under a playing track's title (see TrackSubtitle).
-                NavigationRow(
-                    title = stringResource(R.string.settings_track_subtitle),
-                    subtitle = stringResource(trackSubtitle.labelRes()),
-                    onClick = { page = SettingsPage.TrackSubtitle },
-                )
-                HorizontalDivider()
                 // Queue-end radio (see QueueRadioListener); both providers.
                 SettingsToggleRow(
                     title = stringResource(R.string.settings_autoplay_similar),
@@ -239,45 +248,30 @@ fun SettingsScreen(
                     onToggle = viewModel::setScrobblingEnabled,
                 )
                 HorizontalDivider()
-                ExclusionRow(
-                    title = stringResource(R.string.settings_scrobble_artists),
-                    subtitle = stringResource(R.string.settings_scrobble_artists_hint),
-                    excludedCount = scrobble.excludedArtistIds.size,
-                    onClick = { page = SettingsPage.ScrobbleArtists },
-                )
-                HorizontalDivider()
-                ExclusionRow(
-                    title = stringResource(R.string.settings_scrobble_playlists),
-                    subtitle = stringResource(R.string.settings_scrobble_playlists_hint),
-                    excludedCount = scrobble.excludedPlaylistIds.size,
-                    onClick = { page = SettingsPage.ScrobblePlaylists },
-                )
-                HorizontalDivider()
-                ExclusionRow(
-                    title = stringResource(R.string.settings_scrobble_libraries),
-                    subtitle = stringResource(R.string.settings_scrobble_libraries_hint),
-                    excludedCount = scrobble.excludedLibraryIds.size,
-                    onClick = { page = SettingsPage.ScrobbleLibraries },
-                )
-                HorizontalDivider()
-                // Which now-playing line carries the stream's song (see
-                // RadioNowPlayingListener); car hosts truncate the top line.
-                SettingsToggleRow(
-                    title = stringResource(R.string.settings_radio_station_first),
-                    subtitle = stringResource(
-                        if (radioStationFirst) {
-                            R.string.settings_radio_station_first_on
-                        } else {
-                            R.string.settings_radio_station_first_off
-                        },
-                    ),
-                    checked = radioStationFirst,
-                    onToggle = viewModel::setRadioStationFirst,
-                )
-                HorizontalDivider()
+                // Exclusions only matter while reporting is on; hiding them
+                // otherwise also keeps the off state to a single row.
+                if (scrobble.enabled) {
+                    ExclusionRow(
+                        title = stringResource(R.string.settings_scrobble_exceptions),
+                        subtitle = stringResource(R.string.settings_scrobble_exceptions_hint),
+                        excludedCount = scrobble.excludedArtistIds.size +
+                            scrobble.excludedPlaylistIds.size +
+                            scrobble.excludedLibraryIds.size,
+                        onClick = { page = SettingsPage.ScrobbleExceptions },
+                    )
+                    HorizontalDivider()
+                }
                 SavedSongsRow(
                     count = savedSongs?.size,
                     onClick = { page = SettingsPage.SavedSongs },
+                )
+                HorizontalDivider()
+                // Display tweaks for two-line car hosts (see NowPlayingPage);
+                // last among the settings, as few users need them.
+                NavigationRow(
+                    title = stringResource(R.string.settings_now_playing),
+                    subtitle = stringResource(R.string.settings_now_playing_hint),
+                    onClick = { page = SettingsPage.NowPlaying },
                 )
                 HorizontalDivider()
                 PrivacyPolicyRow()
@@ -342,7 +336,7 @@ fun SettingsScreen(
     }
 }
 
-/** Routes the non-[SettingsPage.Main] pages to their exclusion picker. */
+/** Routes the three exclusion-picker pages (see [ScrobbleExceptionsPage]). */
 @Composable
 private fun ScrobbleExclusionPage(
     page: SettingsPage,
@@ -397,8 +391,8 @@ private fun ScrobbleExclusionPage(
                 modifier = modifier,
             )
         }
-        SettingsPage.Main, SettingsPage.Libraries, SettingsPage.Quality, SettingsPage.TrackSubtitle,
-        SettingsPage.SavedSongs, SettingsPage.Diagnostics -> Unit
+        SettingsPage.Main, SettingsPage.Libraries, SettingsPage.Quality, SettingsPage.NowPlaying,
+        SettingsPage.ScrobbleExceptions, SettingsPage.SavedSongs, SettingsPage.Diagnostics -> Unit
     }
 }
 
