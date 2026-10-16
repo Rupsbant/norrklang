@@ -17,6 +17,16 @@
   <string name="plex_link_instruction">On your phone or computer, go to plex.tv/link and enter this code — or scan the QR code</string>
   <string name="plex_link_waiting">Waiting for you to link…</string>
   <string name="plex_link_qr">QR code for plex.tv/link</string>
+  <string name="plex_pick_user_title">Who\'s listening?</string>
+  <string name="plex_pick_user_subtitle">Choose a profile from your Plex Home</string>
+  <string name="plex_user_admin_badge">Admin</string>
+  <string name="plex_user_pin_badge">PIN</string>
+  <string name="plex_pin_title">Enter PIN</string>
+  <string name="plex_pin_instruction">%1$s is protected with a Plex Home PIN</string>
+  <string name="plex_pin_label">PIN</string>
+  <string name="plex_pin_wrong">Wrong PIN — try again</string>
+  <string name="plex_switching_user">Switching profile…</string>
+  <string name="plex_error_switch_failed">Couldn\'t switch profile — check your connection</string>
   <string name="plex_pick_server_title">Choose a server</string>
   <string name="plex_server_shared_badge">Shared</string>
   <string name="plex_pick_connection_title">Choose a connection</string>

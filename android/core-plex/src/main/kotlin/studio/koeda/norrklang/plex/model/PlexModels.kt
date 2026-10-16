@@ -23,6 +23,30 @@ data class PlexUser(
     val email: String? = null,
 )
 
+/** The Plex Home the linked account administers (`/api/v2/home/users`). */
+@Serializable
+data class PlexHome(
+    val users: List<PlexHomeUser> = emptyList(),
+)
+
+/** One Home profile: the admin, a managed user, or a full account that joined the Home. */
+@Serializable
+data class PlexHomeUser(
+    val uuid: String = "",
+    val title: String = "",
+    val admin: Boolean = false,
+    /** Managed user: no plex.tv credentials of its own; library access is set by the admin. */
+    val restricted: Boolean = false,
+    /** Switching to this profile requires its Plex Home PIN. */
+    @SerialName("protected") val pinProtected: Boolean = false,
+)
+
+/** `/api/v2/home/users/{uuid}/switch` — only the profile's token is read. */
+@Serializable
+data class PlexSwitchedUser(
+    val authToken: String? = null,
+)
+
 /** One entry of `/api/v2/resources` — a server, player, or other device. */
 @Serializable
 data class PlexResource(

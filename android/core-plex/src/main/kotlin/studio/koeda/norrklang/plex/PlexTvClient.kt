@@ -2,14 +2,19 @@ package studio.koeda.norrklang.plex
 
 import io.ktor.client.call.body
 import io.ktor.client.engine.HttpClientEngine
+import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.isSuccess
+import io.ktor.http.parameters
 import kotlin.coroutines.cancellation.CancellationException
+import studio.koeda.norrklang.plex.model.PlexHome
+import studio.koeda.norrklang.plex.model.PlexHomeUser
 import studio.koeda.norrklang.plex.model.PlexPin
 import studio.koeda.norrklang.plex.model.PlexResource
+import studio.koeda.norrklang.plex.model.PlexSwitchedUser
 import studio.koeda.norrklang.plex.model.PlexUser
 
 /**
@@ -55,6 +60,36 @@ class PlexTvClient(
             http.get("$BASE/api/v2/user") { plexHeaders(clientInfo, token) }
         }
         return parse(response)
+    }
+
+    /**
+     * The profiles of the Plex Home the account administers. plex.tv refuses
+     * the call for accounts outside a Home and for non-admin members, so
+     * callers treat any failure as "nothing to pick".
+     */
+    suspend fun homeUsers(token: String): List<PlexHomeUser> {
+        val response = PlexHttp.request(BASE) {
+            http.get("$BASE/api/v2/home/users") { plexHeaders(clientInfo, token) }
+        }
+        return parse<PlexHome>(response).users
+    }
+
+    /**
+     * Switches to a Home profile and returns that profile's plex.tv token.
+     * The token is plex.tv-only — PMS rejects it outright — so it must go
+     * through [servers] for the per-server access token before any server
+     * call. A wrong or missing [pin] surfaces as [PlexException.AuthFailed].
+     */
+    suspend fun switchHomeUser(token: String, user: PlexHomeUser, pin: String?): String {
+        val response = PlexHttp.request(BASE) {
+            http.submitForm(
+                url = "$BASE/api/v2/home/users/${user.uuid}/switch",
+                formParameters = parameters { if (pin != null) append("pin", pin) },
+            ) { plexHeaders(clientInfo, token) }
+        }
+        val switched = parse<PlexSwitchedUser>(response)
+        return switched.authToken?.takeIf { it.isNotEmpty() }
+            ?: throw PlexException.ServerError(null, "plex.tv switched user without a token")
     }
 
     /**

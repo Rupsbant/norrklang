@@ -3,6 +3,7 @@ package studio.koeda.norrklang.ui.signin
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
+import io.ktor.client.engine.mock.toByteArray
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
@@ -10,6 +11,7 @@ import java.io.File
 import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
@@ -29,6 +31,7 @@ import org.junit.rules.TemporaryFolder
 import studio.koeda.norrklang.data.session.SessionManager
 import studio.koeda.norrklang.data.settings.CredentialCipher
 import studio.koeda.norrklang.data.settings.ServerSettingsRepository
+import studio.koeda.norrklang.data.settings.StoredAccount
 import studio.koeda.norrklang.plex.ConnectionProber
 import studio.koeda.norrklang.plex.PlexServerClient
 import studio.koeda.norrklang.plex.PlexTvClient
@@ -79,12 +82,39 @@ class PlexSignInViewModelTest {
     @Volatile
     private var pinsCreated = 0
 
+    /** Home profiles served by `/api/v2/home/users`; null answers 403 (no Home). */
+    private var homeUsers: String? = null
+
+    /** The PIN the switch endpoint accepts for the protected profile. */
+    private var acceptedPin = "1234"
+
+    /** Token (X-Plex-Token header) of the last `/api/v2/resources` call. */
+    @Volatile
+    private var resourcesToken: String? = null
+
+    private val home = """{"id":1,"name":"Home","users":[
+        {"id":10,"uuid":"u-admin","title":"Fredrik","admin":true,"restricted":false,"protected":false},
+        {"id":11,"uuid":"u-kid","title":"Kid","admin":false,"restricted":true,"protected":false},
+        {"id":12,"uuid":"u-teen","title":"Teen","admin":false,"restricted":true,"protected":true}
+    ]}"""
+
     private fun plexTvEngine() = MockEngine { request ->
         val url = request.url.toString()
         val ok = { body: String ->
             respond(body, headers = headersOf(HttpHeaders.ContentType, "application/json"))
         }
         when {
+            "/api/v2/home/users/" in url && url.endsWith("/switch") -> {
+                val uuid = url.substringAfter("/home/users/").substringBefore("/switch")
+                val pin = String(request.body.toByteArray()).substringAfter("pin=", "")
+                if (uuid == "u-teen" && pin != acceptedPin) {
+                    respond("""{"errors":[{"code":1041}]}""", HttpStatusCode.Forbidden)
+                } else {
+                    ok("""{"uuid":"$uuid","authToken":"$uuid-token"}""")
+                }
+            }
+            "/api/v2/home/users" in url -> homeUsers?.let(ok)
+                ?: respond("", HttpStatusCode.Forbidden)
             request.method.value == "POST" && "/api/v2/pins" in url -> {
                 pinsCreated++
                 ok("""{"id":$pinsCreated,"code":"COD$pinsCreated","authToken":null}""")
@@ -105,15 +135,18 @@ class PlexSignInViewModelTest {
                 else -> ok("""{"id":$pinsCreated,"code":"COD$pinsCreated","authToken":"tok"}""")
             }
             "/api/v2/user" in url -> ok("""{"username":"demo"}""")
-            "/api/v2/resources" in url -> ok(
-                """[{"name":"Vault","provides":"server","clientIdentifier":"m1","owned":true,
+            "/api/v2/resources" in url -> {
+                resourcesToken = request.headers["X-Plex-Token"]
+                ok(
+                    """[{"name":"Vault","provides":"server","clientIdentifier":"m1","owned":true,
                     "accessToken":"srv-tok","connections":[
                       {"protocol":"https","address":"10.0.0.2","port":32400,
                        "uri":"https://local.example:32400","local":true,"relay":false},
                       {"protocol":"https","address":"1.2.3.4","port":443,
                        "uri":"https://relay.example:443","local":false,"relay":true}
                     ]}]""",
-            )
+                )
+            }
             else -> ok("{}")
         }
     }
@@ -219,6 +252,102 @@ class PlexSignInViewModelTest {
         vm.confirmLibraries()
         awaitState(vm) { vm.state is PlexSignInViewModel.UiState.Done }
         assertEquals(setOf("6"), runBlocking { settings.excludedLibraryIds.first() })
+    }
+
+    @Test
+    fun `a Plex Home lands on the profile picker and the admin pick skips the switch`() {
+        homeUsers = home
+        val vm = viewModel()
+
+        vm.start()
+        awaitState(vm) { vm.state is PlexSignInViewModel.UiState.PickUser }
+        val pick = assertIs<PlexSignInViewModel.UiState.PickUser>(vm.state)
+        assertEquals(listOf("Fredrik", "Kid", "Teen"), pick.users.map { it.title })
+
+        vm.selectUser(pick.users.first { it.admin })
+        awaitState(vm) {
+            (vm.state as? PlexSignInViewModel.UiState.PickConnection)?.probing == false
+        }
+        // Servers were fetched with the linked (admin) token, no switch in between.
+        assertEquals("tok", resourcesToken)
+        val connection = assertIs<PlexSignInViewModel.UiState.PickConnection>(vm.state)
+        vm.selectConnection(connection.server, connection.probes.first().connection)
+        awaitState(vm) { vm.state is PlexSignInViewModel.UiState.Done }
+        assertEquals("demo", plexUsername())
+    }
+
+    @Test
+    fun `a managed profile is switched before the servers are fetched`() {
+        homeUsers = home
+        val vm = viewModel()
+
+        vm.start()
+        awaitState(vm) { vm.state is PlexSignInViewModel.UiState.PickUser }
+        val pick = assertIs<PlexSignInViewModel.UiState.PickUser>(vm.state)
+
+        vm.selectUser(pick.users.first { it.title == "Kid" })
+        awaitState(vm) {
+            (vm.state as? PlexSignInViewModel.UiState.PickConnection)?.probing == false
+        }
+        // The profile's plex.tv token is exchanged for the server token via
+        // /resources — PMS rejects the switch token itself.
+        assertEquals("u-kid-token", resourcesToken)
+        val connection = assertIs<PlexSignInViewModel.UiState.PickConnection>(vm.state)
+        vm.selectConnection(connection.server, connection.probes.first().connection)
+        awaitState(vm) { vm.state is PlexSignInViewModel.UiState.Done }
+        assertEquals("Kid", plexUsername())
+    }
+
+    @Test
+    fun `a protected profile asks for its PIN and a wrong PIN stays on the page`() {
+        homeUsers = home
+        val vm = viewModel()
+
+        vm.start()
+        awaitState(vm) { vm.state is PlexSignInViewModel.UiState.PickUser }
+        val pick = assertIs<PlexSignInViewModel.UiState.PickUser>(vm.state)
+
+        vm.selectUser(pick.users.first { it.title == "Teen" })
+        val entering = assertIs<PlexSignInViewModel.UiState.EnterPin>(vm.state)
+        assertEquals("Teen", entering.user.title)
+        assertFalse(entering.wrongPin)
+
+        vm.submitPin("0000")
+        awaitState(vm) { (vm.state as? PlexSignInViewModel.UiState.EnterPin)?.wrongPin == true }
+
+        vm.submitPin("1234")
+        awaitState(vm) {
+            (vm.state as? PlexSignInViewModel.UiState.PickConnection)?.probing == false
+        }
+        assertEquals("u-teen-token", resourcesToken)
+    }
+
+    @Test
+    fun `back from the PIN page returns to the profile list`() {
+        homeUsers = home
+        val vm = viewModel()
+
+        vm.start()
+        awaitState(vm) { vm.state is PlexSignInViewModel.UiState.PickUser }
+        val pick = assertIs<PlexSignInViewModel.UiState.PickUser>(vm.state)
+
+        vm.selectUser(pick.users.first { it.pinProtected })
+        assertIs<PlexSignInViewModel.UiState.EnterPin>(vm.state)
+        vm.cancelPin()
+        assertEquals(pick, vm.state)
+    }
+
+    @Test
+    fun `a Home with only the admin skips the picker`() {
+        homeUsers = """{"users":[{"uuid":"u-admin","title":"Fredrik","admin":true}]}"""
+        val vm = viewModel()
+
+        vm.start()
+        awaitState(vm) { vm.state is PlexSignInViewModel.UiState.PickConnection }
+    }
+
+    private fun plexUsername(): String? = runBlocking {
+        (settings.currentAccount() as? StoredAccount.Plex)?.account?.username
     }
 
     @Test

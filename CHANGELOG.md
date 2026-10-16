@@ -9,6 +9,10 @@ is the single source of truth).
 
 ### Added
 
+- Plex Home profiles: after linking, an account that administers a Plex
+  Home picks which profile to listen as, with a PIN step for protected
+  ones; managed users see the libraries the admin shares with them (#15).
+  Switching profile later means signing out and linking again.
 - Settings → Now playing details: show the album next to the artist on the
   line under a playing song's title, as "Artist · Album" or "Album · Artist",
   for cars that show only two lines (#10). Where supported, tapping that line

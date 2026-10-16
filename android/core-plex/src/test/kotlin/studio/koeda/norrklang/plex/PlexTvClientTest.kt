@@ -2,6 +2,7 @@ package studio.koeda.norrklang.plex
 
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
+import io.ktor.client.engine.mock.toByteArray
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
@@ -13,6 +14,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
+import studio.koeda.norrklang.plex.model.PlexHomeUser
 
 class PlexTvClientTest {
 
@@ -21,6 +23,8 @@ class PlexTvClientTest {
     private var lastRequestUrl: String = ""
     private var lastRequestMethod: HttpMethod = HttpMethod.Get
     private var lastRequestHeaders: Map<String, String> = emptyMap()
+    private var lastRequestBody: String = ""
+    private var lastRequestContentType: String? = null
 
     private fun clientReturning(body: String, status: HttpStatusCode = HttpStatusCode.OK) =
         PlexTvClient(
@@ -30,6 +34,8 @@ class PlexTvClientTest {
                 lastRequestMethod = request.method
                 lastRequestHeaders = request.headers.entries()
                     .associate { (key, values) -> key to values.joinToString(",") }
+                lastRequestBody = String(request.body.toByteArray())
+                lastRequestContentType = request.body.contentType?.toString()
                 respond(
                     content = body,
                     status = status,
@@ -81,6 +87,65 @@ class PlexTvClientTest {
         assertEquals("demo", user.username)
         assertTrue("/api/v2/user" in lastRequestUrl)
         assertEquals("account-token", lastRequestHeaders["X-Plex-Token"])
+    }
+
+    @Test
+    fun `homeUsers sends the token and parses the Home's profiles`() = runTest {
+        val users = clientReturning(
+            """{"id":1,"name":"Home","users":[
+              {"id":10,"uuid":"u-admin","title":"Fredrik","admin":true,"restricted":false,"protected":true},
+              {"id":11,"uuid":"u-kid","title":"Kid","admin":false,"restricted":true,"protected":false}
+            ]}""",
+        ).homeUsers("admin-token")
+
+        assertEquals(listOf("Fredrik", "Kid"), users.map { it.title })
+        assertTrue(users[0].admin)
+        assertTrue(users[0].pinProtected)
+        assertTrue(users[1].restricted)
+        assertEquals("u-kid", users[1].uuid)
+        assertTrue("/api/v2/home/users" in lastRequestUrl)
+        assertEquals("admin-token", lastRequestHeaders["X-Plex-Token"])
+    }
+
+    @Test
+    fun `switchHomeUser posts the pin as a form field and returns the profile token`() = runTest {
+        val token = clientReturning(
+            """{"id":11,"uuid":"u-kid","title":"Kid","authToken":"kid-token"}""",
+        ).switchHomeUser("admin-token", PlexHomeUser(uuid = "u-kid", title = "Kid"), pin = "1234")
+
+        assertEquals("kid-token", token)
+        assertEquals(HttpMethod.Post, lastRequestMethod)
+        assertTrue("/api/v2/home/users/u-kid/switch" in lastRequestUrl)
+        // The PIN rides in the body, never the URL.
+        assertEquals("pin=1234", lastRequestBody)
+        assertTrue("pin" !in lastRequestUrl)
+        assertTrue(lastRequestContentType!!.startsWith("application/x-www-form-urlencoded"))
+        // Switching is authorised by the admin's token.
+        assertEquals("admin-token", lastRequestHeaders["X-Plex-Token"])
+    }
+
+    @Test
+    fun `switchHomeUser without a pin sends an empty form`() = runTest {
+        clientReturning("""{"authToken":"kid-token"}""")
+            .switchHomeUser("admin-token", PlexHomeUser(uuid = "u-kid"), pin = null)
+
+        assertEquals("", lastRequestBody)
+    }
+
+    @Test
+    fun `rejected pin maps to AuthFailed`() = runTest {
+        val client = clientReturning("""{"errors":[{"code":1041}]}""", HttpStatusCode.Forbidden)
+        assertFailsWith<PlexException.AuthFailed> {
+            client.switchHomeUser("admin-token", PlexHomeUser(uuid = "u-kid"), pin = "0000")
+        }
+    }
+
+    @Test
+    fun `switch response without a token maps to ServerError`() = runTest {
+        val client = clientReturning("""{"id":11,"uuid":"u-kid","authToken":null}""")
+        assertFailsWith<PlexException.ServerError> {
+            client.switchHomeUser("admin-token", PlexHomeUser(uuid = "u-kid"), pin = null)
+        }
     }
 
     @Test

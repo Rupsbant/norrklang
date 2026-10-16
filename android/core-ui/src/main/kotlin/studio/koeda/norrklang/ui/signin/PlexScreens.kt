@@ -14,25 +14,33 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import studio.koeda.norrklang.plex.ConnectionProber
 import studio.koeda.norrklang.plex.model.PlexConnection
+import studio.koeda.norrklang.plex.model.PlexHomeUser
 import studio.koeda.norrklang.plex.model.PlexResource
 import studio.koeda.norrklang.ui.R
 import studio.koeda.norrklang.ui.components.BackButton
@@ -40,13 +48,16 @@ import studio.koeda.norrklang.ui.components.LibraryChecklist
 import studio.koeda.norrklang.ui.theme.LocalFormDimens
 
 /*
- * The Plex half of the sign-in flow: one scaffold, three page bodies driven
- * by PlexSignInViewModel.UiState. Parked-only on AAOS, like SignInScreen.
+ * The Plex half of the sign-in flow: one scaffold, one page body per
+ * PlexSignInViewModel.UiState. Parked-only on AAOS, like SignInScreen.
  */
 
 @Composable
 internal fun PlexSignInPage(
     state: PlexSignInViewModel.UiState,
+    onSelectUser: (PlexHomeUser) -> Unit,
+    onSubmitPin: (String) -> Unit,
+    onCancelPin: () -> Unit,
     onSelectServer: (PlexResource) -> Unit,
     onSelectConnection: (PlexResource, PlexConnection) -> Unit,
     onToggleLibrary: (String, Boolean) -> Unit,
@@ -56,6 +67,8 @@ internal fun PlexSignInPage(
     onBack: (() -> Unit)? = null,
 ) {
     val dimens = LocalFormDimens.current
+    // Back from the PIN page returns to the profile list, not the provider picker.
+    val back = if (state is PlexSignInViewModel.UiState.EnterPin) onCancelPin else onBack
 
     Box(
         modifier = modifier
@@ -63,9 +76,9 @@ internal fun PlexSignInPage(
             .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center,
     ) {
-        if (onBack != null) {
+        if (back != null) {
             BackButton(
-                onBack = onBack,
+                onBack = back,
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(16.dp),
@@ -86,6 +99,15 @@ internal fun PlexSignInPage(
 
                 is PlexSignInViewModel.UiState.WaitingForLink ->
                     LinkBody(code = state.code, linkUrl = state.linkUrl)
+
+                is PlexSignInViewModel.UiState.PickUser ->
+                    UsersBody(state.users, onSelectUser)
+
+                is PlexSignInViewModel.UiState.EnterPin ->
+                    PinBody(state, onSubmitPin)
+
+                is PlexSignInViewModel.UiState.SwitchingUser ->
+                    LoadingBody(stringResource(R.string.plex_switching_user))
 
                 is PlexSignInViewModel.UiState.FetchingServers ->
                     LoadingBody(stringResource(R.string.plex_pick_server_title))
@@ -178,6 +200,80 @@ private fun LinkBody(code: String, linkUrl: String) {
             text = stringResource(R.string.plex_link_waiting),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun UsersBody(users: List<PlexHomeUser>, onSelect: (PlexHomeUser) -> Unit) {
+    PageTitle(stringResource(R.string.plex_pick_user_title))
+    Text(
+        text = stringResource(R.string.plex_pick_user_subtitle),
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    users.forEach { user ->
+        SelectionCard(onClick = { onSelect(user) }) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = user.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                )
+                if (user.admin) {
+                    PassiveBadge(stringResource(R.string.plex_user_admin_badge))
+                }
+                if (user.pinProtected) {
+                    PassiveBadge(stringResource(R.string.plex_user_pin_badge))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PinBody(state: PlexSignInViewModel.UiState.EnterPin, onSubmit: (String) -> Unit) {
+    val dimens = LocalFormDimens.current
+    // Keyed on the state so a rejected attempt starts from an empty field.
+    var pin by remember(state) { mutableStateOf("") }
+    PageTitle(stringResource(R.string.plex_pin_title))
+    Text(
+        text = stringResource(R.string.plex_pin_instruction, state.user.title),
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    OutlinedTextField(
+        value = pin,
+        onValueChange = { pin = it.filter(Char::isDigit) },
+        label = { Text(stringResource(R.string.plex_pin_label)) },
+        singleLine = true,
+        visualTransformation = PasswordVisualTransformation(),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+        shape = MaterialTheme.shapes.large,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    if (state.wrongPin) {
+        Text(
+            text = stringResource(R.string.plex_pin_wrong),
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+    Button(
+        onClick = { onSubmit(pin) },
+        enabled = pin.isNotEmpty(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = dimens.controlMinHeight),
+    ) {
+        Text(
+            text = stringResource(R.string.signin_continue),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
         )
     }
 }
@@ -319,6 +415,7 @@ private fun ErrorBody(kind: PlexSignInViewModel.ErrorKind, onRetry: () -> Unit) 
         text = stringResource(
             when (kind) {
                 PlexSignInViewModel.ErrorKind.LINK_FAILED -> R.string.plex_error_link_failed
+                PlexSignInViewModel.ErrorKind.SWITCH_FAILED -> R.string.plex_error_switch_failed
                 PlexSignInViewModel.ErrorKind.NO_SERVERS -> R.string.plex_error_no_servers
                 PlexSignInViewModel.ErrorKind.NO_MUSIC_LIBRARY ->
                     R.string.plex_error_no_music_library

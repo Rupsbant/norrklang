@@ -91,6 +91,9 @@ fun SignInFlow(
 
         SignInPage.Plex -> PlexSignInPage(
             state = plexViewModel.state,
+            onSelectUser = plexViewModel::selectUser,
+            onSubmitPin = plexViewModel::submitPin,
+            onCancelPin = plexViewModel::cancelPin,
             onSelectServer = plexViewModel::selectServer,
             onSelectConnection = plexViewModel::selectConnection,
             onToggleLibrary = plexViewModel::toggleLibrary,
