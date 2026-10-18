@@ -6,7 +6,7 @@ The first project is a **car media app** for **Android Automotive OS** — it ru
 
 The repo also contains `app-mobile`, a phone APK that hosts **Android Auto** projection from the same Kotlin codebase. It builds, passes the same tests, and shares all the core modules — but it has not had the same real-world testing as the car app, so it is not yet published. The first Play release is Android Automotive OS only; Android Auto will follow once it has been proven out.
 
-**Status: 1.3.** The app is feature-complete for everyday in-car listening
+**Status: 1.4.** The app is feature-complete for everyday in-car listening
 and hardened for distribution (signed releases, encrypted credential storage,
 per-account caches), but it has seen a small number of servers and cars.
 Expect rough edges; please report them.
@@ -15,7 +15,8 @@ Expect rough edges; please report them.
   implementing **Subsonic API 1.16.1** (token authentication preferred;
   servers that only accept the password itself, such as Nextcloud Music or
   LDAP-backed Subsonic, are detected and handled automatically); or a
-  **Plex Media Server** with a music library, linked with a Plex account; or
+  **Plex Media Server** with a music library, linked with a Plex account
+  (Plex Home profiles included); or
   **Jellyfin** with a music library accessible to the signed-in user.
 - **HTTPS required for your server**: release builds refuse to sign in to a
   plain `http://` address — put your server behind TLS (a reverse proxy with

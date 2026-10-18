@@ -5,32 +5,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow semver (`norrklang.version` in `android/gradle.properties`
 is the single source of truth).
 
-## [Unreleased]
+## [1.4.0] — 2026-10-18
 
 ### Added
 
-- Plex Home profiles: after linking, an account that administers a Plex
-  Home picks which profile to listen as, with a PIN step for protected
-  ones; managed users see the libraries the admin shares with them (#15).
-  Switching profile later means signing out and linking again.
-- Settings → Now playing: show the album next to the artist on the
-  line under a playing song's title, as "Artist · Album" or "Album · Artist",
-  for cars that show only two lines (#10). Where supported, tapping that line
-  opens the album.
+- Plex Home: pick which profile to listen as after linking, with a PIN for
+  protected ones; changing profile later means linking again (#15).
+- Settings → Now playing: optional album next to the artist under the
+  title, for cars that show only two lines (#10), and a radio layout with
+  the station name first.
 
 ### Changed
 
-- Next and previous switch radio station, in Radio list order (#12).
-- Shorter Settings: play-reporting exclusions moved under one Exceptions
-  row, now-playing layout choices under one Now playing page.
+- Next and previous switch radio station (#12).
+- Shorter Settings: exclusions and now-playing choices grouped on own pages.
 - A radio stream that ends reconnects instead of stopping.
+- Privacy policy (effective 2026-10-18) covers the Plex Home profile switch
+  and the now-playing settings; README, website and listing updated.
 
 ### Fixed
 
 - Skipping past an item that failed to play left playback stopped.
 - Some AAC radio stations took about 19 seconds to start (#11).
-- Station logos were missing when the homepage icon declares no size or
-  the homepage redirects from `http://` to `https://`.
+- Station logos missing for some homepage icons and `http://` redirects.
 
 ## [1.3.0] — 2026-09-25
 

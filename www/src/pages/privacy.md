@@ -2,7 +2,7 @@
 layout: ../layouts/Legal.astro
 title: Privacy Policy
 description: What Norrklang stores, what it sends, and to whom. No analytics, no third parties.
-effectiveDate: 2026-09-25
+effectiveDate: 2026-10-18
 ---
 
 Norrklang is a music player for [Navidrome](https://www.navidrome.org/) and
@@ -25,7 +25,9 @@ All data the app stores stays **on your device**:
   Jellyfin it is the access token your server issues at sign-in (the password
   is sent to your server once and never retained); for Plex it is the token
   plex.tv issues when you link the device (the app never sees your Plex
-  password at all). Whichever token it is, it is encrypted with a key that never
+  password at all); if you pick a Plex Home profile, it is that profile's
+  token, and the profile's PIN is sent to plex.tv once and not kept.
+  Whichever token it is, it is encrypted with a key that never
   leaves the device's Android Keystore, so the stored value is useless
   anywhere else. The app also opts out of Android's automatic backup and
   device-to-device transfer, so none of its data is copied into cloud backups
@@ -40,9 +42,10 @@ All data the app stores stays **on your device**:
   keeps no radio play counts, and none of this is sent to it.
 - **Your settings** — which of your server's music libraries to show,
   whether scrobbling is on, any artists, playlists or libraries you exclude
-  from it, autoplay, the radio now-playing layout, and the streaming quality
-  tier for Wi-Fi and for mobile data. Which of the two applies is decided on the device from the
-  car's current connection; nothing about the network is sent anywhere.
+  from it, autoplay, the now-playing layout choices, and the streaming
+  quality tier for Wi-Fi and for mobile data. Which of the two applies is
+  decided on the device from the car's current connection; nothing about the
+  network is sent anywhere.
 - **Caches** — library listings and cover art fetched from your server, kept
   per account. Listings are held in memory only and disappear when the app
   stops; cached cover art is stored in the app's cache area and deleted when a
@@ -72,8 +75,9 @@ else, apart from the plex.tv exception below:
 - favourite updates you trigger (e.g. the heart button in the car)
 
 If you sign in with Plex, the app also talks to **plex.tv**, Plex's own
-service: at sign-in to link the device, and to list your servers and their
-connection addresses. Your music library, streaming and play reports still go
+service: at sign-in to link the device and, in a Plex Home, to switch to
+the profile you pick, and to list your servers and their connection
+addresses. Your music library, streaming and play reports still go
 only to your own Plex Media Server. Plex's handling of that service traffic is
 governed by [Plex's privacy policy](https://www.plex.tv/about/privacy-legal/),
 not this one. Jellyfin sign-in involves no such intermediary: the app talks to

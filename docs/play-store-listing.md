@@ -41,8 +41,9 @@ and generated mixes — Best of, Similar to, genres and decades
 (can be turned off)
 • Add albums and songs as favourites while listening
 • Internet radio: the stations set up on your Navidrome server, with the
-ones you listen to most on Home. Heart a song you hear to note it — the list
-stays in the car, with a QR code to open it on your phone
+ones you listen to most on Home, and next/previous to switch station. Heart
+a song you hear to note it — the list stays in the car, with a QR code to
+open it on your phone
 • Voice and keyboard search across artists, albums and tracks
 • Ask the car's assistant to play an artist, album, song or playlist
 • Streaming quality per connection: original files on Wi-Fi, a capped
@@ -63,6 +64,7 @@ their own address, plain http included
 Plex
 • Link your Plex account with a short code or QR scan — no password typed in
 the car
+• Plex Home: pick which profile to listen as, with a PIN for protected ones
 • Streams from your own Plex Media Server
 
 Jellyfin
@@ -83,6 +85,17 @@ Privacy policy: https://norrklang.app/privacy
 ```
 
 ## Release notes ("What's new", ≤ 500 characters)
+
+For the 1.4.0 release:
+
+```
+• Plex Home: pick which profile to listen as, with a PIN for protected ones
+• Radio stations that took up to 20 seconds to start now play right away
+• Next and previous switch radio station
+• Optional album next to the artist under the title, for cars that show
+only two lines
+• Shorter, better grouped Settings
+```
 
 For the 1.3.0 release:
 
