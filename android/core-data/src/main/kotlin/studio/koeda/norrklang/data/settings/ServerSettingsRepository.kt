@@ -8,6 +8,14 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
+import java.io.ByteArrayInputStream
+import java.security.KeyFactory
+import java.security.KeyPair
+import java.security.cert.CertificateFactory
+import java.security.cert.X509Certificate
+import java.security.spec.PKCS8EncodedKeySpec
+import java.security.spec.X509EncodedKeySpec
+import java.util.Base64
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -20,6 +28,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import studio.koeda.norrklang.data.diagnostics.Diagnostics
+import studio.koeda.norrklang.data.mtls.MtlsIdentity
+import studio.koeda.norrklang.data.mtls.MtlsMaterial
 import studio.koeda.norrklang.jellyfin.JellyfinAccount
 import studio.koeda.norrklang.plex.PlexAccount
 import studio.koeda.norrklang.subsonic.SubsonicCredentials
@@ -119,6 +129,15 @@ class ServerSettingsRepository @Inject constructor(
 
         /** Pre-token builds stored the plaintext password under this key. */
         val LEGACY_PASSWORD = stringPreferencesKey("password")
+
+        /**
+         * mTLS identity (see [mtlsMaterial]): the PKCS8 private key encrypted
+         * with [cipher], the SPKI public key in the clear (it is not a
+         * secret), and the DER certificate the server signed for it.
+         */
+        val MTLS_PRIVATE_KEY = stringPreferencesKey("mtls_private_key")
+        val MTLS_PUBLIC_KEY = stringPreferencesKey("mtls_public_key")
+        val MTLS_CERTIFICATE = stringPreferencesKey("mtls_certificate")
     }
 
     // flowOn keeps decrypt (Keystore binder IPC + AES) off the collector's
@@ -574,6 +593,78 @@ class ServerSettingsRepository @Inject constructor(
     ) {
         val current = this[key] ?: emptySet()
         this[key] = if (add) current + value else current - value
+    }
+
+    // --- mTLS identity (see studio.koeda.norrklang.data.mtls.MtlsManager) ---
+
+    /**
+     * The device's mTLS material: the generated EC keypair (private key
+     * encrypted at rest, like every other secret here) and, once the server
+     * has signed it, the certificate. Device-scoped — like the Plex/Jellyfin
+     * device ids it survives a sign-out, so a re-sign-in reconnects with the
+     * same identity the server already knows.
+     */
+    val mtlsMaterial: Flow<MtlsMaterial?> =
+        dataStore.data.map(::decodeMtls).flowOn(Dispatchers.IO)
+
+    private fun decodeMtls(prefs: Preferences): MtlsMaterial? {
+        val storedKey = prefs[Keys.MTLS_PRIVATE_KEY] ?: return null
+        val storedPublic = prefs[Keys.MTLS_PUBLIC_KEY] ?: return null
+        val pkcs8 = cipher.decrypt(storedKey)?.let(::decodeBase64) ?: return null
+        val spki = decodeBase64(storedPublic) ?: return null
+        val keyPair = try {
+            val ec = KeyFactory.getInstance("EC")
+            KeyPair(
+                ec.generatePublic(X509EncodedKeySpec(spki)),
+                ec.generatePrivate(PKCS8EncodedKeySpec(pkcs8)),
+            )
+        } catch (e: Exception) {
+            Diagnostics.record("mtls-decode", e)
+            return null
+        }
+        val storedCert = prefs[Keys.MTLS_CERTIFICATE]?.let(::decodeBase64)
+            ?: return MtlsMaterial.KeyPairOnly(keyPair)
+        return try {
+            val certificate = CertificateFactory.getInstance("X.509")
+                .generateCertificate(ByteArrayInputStream(storedCert)) as X509Certificate
+            MtlsMaterial.Complete(MtlsIdentity(keyPair, certificate))
+        } catch (e: Exception) {
+            // A corrupt certificate reads as "keypair, not yet signed" — the
+            // user re-downloads it instead of being stuck with an unusable
+            // identity.
+            Diagnostics.record("mtls-decode", e)
+            MtlsMaterial.KeyPairOnly(keyPair)
+        }
+    }
+
+    private fun decodeBase64(stored: String): ByteArray? =
+        runCatching { Base64.getDecoder().decode(stored) }.getOrNull()
+
+    /** Stores a freshly generated keypair; dropping any old certificate. */
+    suspend fun storeMtlsKeyPair(keyPair: KeyPair) {
+        dataStore.edit { prefs ->
+            prefs[Keys.MTLS_PRIVATE_KEY] =
+                cipher.encrypt(Base64.getEncoder().encodeToString(keyPair.private.encoded))
+            prefs[Keys.MTLS_PUBLIC_KEY] =
+                Base64.getEncoder().encodeToString(keyPair.public.encoded)
+            prefs.remove(Keys.MTLS_CERTIFICATE)
+        }
+    }
+
+    /** Stores the certificate [MtlsManager] verified against the keypair. */
+    suspend fun storeMtlsCertificate(certificate: X509Certificate) {
+        dataStore.edit { prefs ->
+            prefs[Keys.MTLS_CERTIFICATE] =
+                Base64.getEncoder().encodeToString(certificate.encoded)
+        }
+    }
+
+    suspend fun removeMtlsIdentity() {
+        dataStore.edit { prefs ->
+            prefs.remove(Keys.MTLS_PRIVATE_KEY)
+            prefs.remove(Keys.MTLS_PUBLIC_KEY)
+            prefs.remove(Keys.MTLS_CERTIFICATE)
+        }
     }
 
     // --- Internet radio ---

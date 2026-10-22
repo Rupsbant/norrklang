@@ -3,7 +3,8 @@ package studio.koeda.norrklang.subsonic
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.HttpClientEngine
-import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.engine.HttpClientEngineConfig
+import io.ktor.client.engine.HttpClientEngineFactory
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
@@ -33,14 +34,24 @@ import studio.koeda.norrklang.subsonic.model.SubsonicResponse
 /**
  * Coroutine-based client for the Subsonic API v1.16.1 as served by Navidrome.
  *
- * [engine] exists for tests (Ktor MockEngine); production shares one OkHttp
- * engine across instances to avoid a thread pool per client. [close] releases
- * the client's own resources but never the shared engine.
+ * [engineFactory] exists for tests (Ktor MockEngine). By default it comes
+ * from [SubsonicEngineProvider], which the host app points at its shared
+ * (optionally mTLS) OkHttp client, so no thread pool is created per client.
+ * [close] releases the client's own resources but never an externally-provided
+ * engine.
  */
 class SubsonicClient(
     private val credentials: SubsonicCredentials,
-    engine: HttpClientEngine = sharedEngine,
+    engineFactory: HttpClientEngineFactory<*> = SubsonicEngineProvider.engineFactory(credentials),
 ) : AutoCloseable {
+
+    /** For tests: wraps a pre-built engine (e.g. Ktor's [io.ktor.client.engine.mock.MockEngine]). */
+    constructor(credentials: SubsonicCredentials, engine: HttpClientEngine) : this(
+        credentials,
+        object : HttpClientEngineFactory<HttpClientEngineConfig> {
+            override fun create(block: HttpClientEngineConfig.() -> Unit): HttpClientEngine = engine
+        },
+    )
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -52,7 +63,7 @@ class SubsonicClient(
         isLenient = true
     }
 
-    private val http = HttpClient(engine) {
+    private val http = HttpClient(engineFactory) {
         expectSuccess = false
         install(ContentNegotiation) { json(json) }
         // OkHttp has no default call timeout, so a server trickling bytes
@@ -336,11 +347,5 @@ class SubsonicClient(
 
     override fun close() {
         http.close()
-    }
-
-    private companion object {
-        // Ktor never closes an externally-provided engine, so this lives for
-        // the process lifetime no matter how many clients come and go.
-        val sharedEngine: HttpClientEngine by lazy { OkHttp.create() }
     }
 }

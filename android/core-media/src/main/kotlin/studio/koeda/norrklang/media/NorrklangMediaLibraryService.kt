@@ -11,8 +11,8 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSourceBitmapLoader
 import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
@@ -37,6 +37,8 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import studio.koeda.norrklang.data.diagnostics.Diagnostics
+import studio.koeda.norrklang.data.mtls.MtlsManager
+import studio.koeda.norrklang.data.mtls.MtlsOkHttpProvider
 import studio.koeda.norrklang.data.radio.SavedRadioSongs
 import studio.koeda.norrklang.data.repo.MusicRepository
 import studio.koeda.norrklang.data.session.ProviderSession
@@ -56,6 +58,8 @@ import studio.koeda.norrklang.data.settings.TrackSubtitle
 class NorrklangMediaLibraryService : MediaLibraryService() {
 
     @Inject internal lateinit var sessionManager: SessionManager
+    @Inject internal lateinit var mtls: MtlsManager
+    @Inject internal lateinit var mtlsOkHttp: MtlsOkHttpProvider
     @Inject internal lateinit var repository: MusicRepository
     @Inject internal lateinit var settings: ServerSettingsRepository
     @Inject internal lateinit var savedSongs: SavedRadioSongs
@@ -83,6 +87,17 @@ class NorrklangMediaLibraryService : MediaLibraryService() {
     override fun onCreate() {
         super.onCreate()
 
+        // The stream data sources read the mTLS identity lazily, at load
+        // time; start loading it now so the first playback already presents
+        // the client certificate to an mTLS server.
+        serviceScope.launch {
+            try {
+                mtls.ensureLoaded()
+            } catch (e: Exception) {
+                Diagnostics.record("mtls-load", e)
+            }
+        }
+
         // Each track's data source pins its quality across retries and seeks.
         // New tracks pick the latest network tier.
         val monitor = NetworkMonitor(this).also { networkMonitor = it }
@@ -99,6 +114,9 @@ class NorrklangMediaLibraryService : MediaLibraryService() {
             monitor.onCellular.collect { resolver.onCellular = it }
         }
 
+        // Artwork goes through the same client: an mTLS server demands the
+        // certificate for every connection, covers included.
+        val artworkDataSourceFactory = OkHttpDataSource.Factory { mtlsOkHttp.client() }
         val player = buildPlayer(resolver)
         player.addListener(PlaybackErrorRecorder())
         player.addListener(RandomMixPlaySourceListener(randomMix))
@@ -172,7 +190,11 @@ class NorrklangMediaLibraryService : MediaLibraryService() {
             // Fetches https artwork in-process and hands bitmaps to the
             // platform session — without this, covers stay blank on Android
             // Auto head units.
-            .setBitmapLoader(CacheBitmapLoader(DataSourceBitmapLoader.Builder(this).build()))
+            .setBitmapLoader(
+                CacheBitmapLoader(
+                    DataSourceBitmapLoader.Builder(this, artworkDataSourceFactory).build(),
+                ),
+            )
             .build()
             .also { session ->
                 // The Builder's extras never reach the platform session legacy
@@ -194,7 +216,11 @@ class NorrklangMediaLibraryService : MediaLibraryService() {
      * BUFFERING instead of escalating to a fatal player error.
      */
     private fun buildPlayer(resolver: StreamUrlResolver): AuthGatePlayer {
-        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+        // The supplier (not a fixed client) defers the lookup to source-
+        // creation, i.e. playback time, when the mTLS identity is guaranteed
+        // loaded. With a certificate installed the same client presents it in
+        // the handshake; without one it is the plain default.
+        val httpDataSourceFactory = OkHttpDataSource.Factory { mtlsOkHttp.client() }
             .setConnectTimeoutMs(HTTP_CONNECT_TIMEOUT_MS)
             .setReadTimeoutMs(HTTP_READ_TIMEOUT_MS)
             .setAllowCrossProtocolRedirects(true)
