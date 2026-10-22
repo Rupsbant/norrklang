@@ -11,6 +11,7 @@ import java.security.PrivateKey
 import java.security.cert.Certificate
 import java.security.cert.X509Certificate
 import java.security.SecureRandom
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import javax.net.ssl.KeyManagerFactory
@@ -70,6 +71,17 @@ class MtlsOkHttpProvider @Inject constructor(
         combinedManager = combined
         return client
     }
+
+    /**
+     * The shared [client] with playback-specific timeouts: media3's
+     * `OkHttpDataSource.Factory` can't set them, so the stream data sources
+     * wrap the client this way. `newBuilder` shares the pool and cache.
+     */
+    fun streamClient(connectTimeoutMs: Long, readTimeoutMs: Long): OkHttpClient =
+        client().newBuilder()
+            .connectTimeout(connectTimeoutMs, TimeUnit.MILLISECONDS)
+            .readTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
+            .build()
 
     /** The manager installed by the last [client] rebuild; null for a plain client. */
     @Volatile

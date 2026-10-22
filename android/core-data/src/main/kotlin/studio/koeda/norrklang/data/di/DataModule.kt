@@ -12,6 +12,9 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.HttpTimeout
 import javax.inject.Qualifier
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -68,6 +71,16 @@ object DataProvidesModule {
     @AppPackageName
     fun providePackageName(@ApplicationContext context: Context): String =
         context.packageName
+
+    @Provides
+    @Singleton
+    fun provideHttpClient(): HttpClient =
+        HttpClient(OkHttp.create()) {
+            install(HttpTimeout) {
+                connectTimeoutMillis = 15_000
+                requestTimeoutMillis = 30_000
+            }
+        }
 }
 
 @Module

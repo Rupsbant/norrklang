@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import okhttp3.Call
 import studio.koeda.norrklang.data.diagnostics.Diagnostics
 import studio.koeda.norrklang.data.mtls.MtlsManager
 import studio.koeda.norrklang.data.mtls.MtlsOkHttpProvider
@@ -114,9 +115,6 @@ class NorrklangMediaLibraryService : MediaLibraryService() {
             monitor.onCellular.collect { resolver.onCellular = it }
         }
 
-        // Artwork goes through the same client: an mTLS server demands the
-        // certificate for every connection, covers included.
-        val artworkDataSourceFactory = OkHttpDataSource.Factory { mtlsOkHttp.client() }
         val player = buildPlayer(resolver)
         player.addListener(PlaybackErrorRecorder())
         player.addListener(RandomMixPlaySourceListener(randomMix))
@@ -192,7 +190,7 @@ class NorrklangMediaLibraryService : MediaLibraryService() {
             // Auto head units.
             .setBitmapLoader(
                 CacheBitmapLoader(
-                    DataSourceBitmapLoader.Builder(this, artworkDataSourceFactory).build(),
+                    DataSourceBitmapLoader.Builder(this).build(),
                 ),
             )
             .build()
@@ -220,10 +218,11 @@ class NorrklangMediaLibraryService : MediaLibraryService() {
         // creation, i.e. playback time, when the mTLS identity is guaranteed
         // loaded. With a certificate installed the same client presents it in
         // the handshake; without one it is the plain default.
-        val httpDataSourceFactory = OkHttpDataSource.Factory { mtlsOkHttp.client() }
-            .setConnectTimeoutMs(HTTP_CONNECT_TIMEOUT_MS)
-            .setReadTimeoutMs(HTTP_READ_TIMEOUT_MS)
-            .setAllowCrossProtocolRedirects(true)
+        val httpDataSourceFactory = OkHttpDataSource.Factory(Call.Factory { request ->
+            mtlsOkHttp
+                .streamClient(HTTP_CONNECT_TIMEOUT_MS, HTTP_READ_TIMEOUT_MS)
+                .newCall(request)
+        })
         // Capped tiers are live server transcodes: chunked, no length, no
         // seek table — without this flag the extractor marks them unseekable
         // and the car host freezes the scrubber. All three providers are
@@ -470,8 +469,8 @@ class NorrklangMediaLibraryService : MediaLibraryService() {
         private const val TARGET_PRELOAD_DURATION_US = 30_000_000L
 
         // Defaults (8s/8s/3 retries) give up after a few seconds of bad LTE.
-        private const val HTTP_CONNECT_TIMEOUT_MS = 15_000
-        private const val HTTP_READ_TIMEOUT_MS = 20_000
+        private const val HTTP_CONNECT_TIMEOUT_MS = 15_000L
+        private const val HTTP_READ_TIMEOUT_MS = 20_000L
         private const val LOAD_RETRY_COUNT = 8
 
         /** Both app modules register their sign-in activity for this action. */

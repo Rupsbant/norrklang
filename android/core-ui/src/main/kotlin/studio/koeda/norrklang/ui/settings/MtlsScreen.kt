@@ -79,9 +79,10 @@ fun MtlsPage(
         )
         Spacer(Modifier.height(dimens.itemSpacing))
 
-        val publicKeyPem = when (status) {
-            is Status.KeyGenerated -> status.publicKeyPem
-            is Status.Ready -> status.publicKeyPem
+        val currentStatus = status
+        val publicKeyPem = when (currentStatus) {
+            is Status.KeyGenerated -> currentStatus.publicKeyPem
+            is Status.Ready -> currentStatus.publicKeyPem
             Status.None -> null
         }
 

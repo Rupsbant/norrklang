@@ -136,8 +136,7 @@ class MtlsViewModel @Inject constructor(
         viewModelScope.launch {
             _busy.value = true
             _message.value = null
-            runCatching { mtls.downloadCertificate(url) }
-                .flatMap { mtls.installCertificate(it) }
+            runCatching { mtls.installCertificate(mtls.downloadCertificate(url).getOrThrow()) }
                 .onSuccess { _message.value = context.getString(R.string.mtls_certificate_installed) }
                 .onFailure { e ->
                     _message.value = when ((e as? MtlsException)?.failure) {
