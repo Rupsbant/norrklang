@@ -9,6 +9,7 @@ import java.security.KeyStore
 import java.security.Principal
 import java.security.PrivateKey
 import java.security.cert.Certificate
+import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
 import java.security.SecureRandom
 import java.util.concurrent.TimeUnit
@@ -53,22 +54,36 @@ class MtlsOkHttpProvider @Inject constructor(
 
     @Synchronized
     fun client(): OkHttpClient {
-        val fingerprint = mtls.identityNow?.fingerprint
+        val identity = mtls.identityNow
+        val rootCa = mtls.rootCaNow
+        val fingerprint = (identity?.fingerprint ?: "none") +
+            "/" + (rootCa?.encoded?.joinToString(":") { String.format("%02X", it) } ?: "none")
         cached?.takeIf { it.first == fingerprint }?.let { return it.second }
         val builder = OkHttpClient.Builder()
+        val trustManager = trustManagerFor(rootCa)
         var combined: CombinedKeyAndTrustManager? = null
-        mtls.identityNow?.let { identity ->
-            val keyManager = keyManagerFor(identity)
-            val trustManager = platformTrustManager()
-            val context = SSLContext.getInstance("TLS").apply {
-                init(arrayOf(keyManager), arrayOf<TrustManager>(trustManager), SecureRandom())
+        when {
+            identity != null -> {
+                val keyManager = keyManagerFor(identity)
+                val context = SSLContext.getInstance("TLS").apply {
+                    init(arrayOf(keyManager), arrayOf<TrustManager>(trustManager), SecureRandom())
+                }
+                combined = CombinedKeyAndTrustManager(keyManager, trustManager)
+                builder.sslSocketFactory(context.socketFactory, combined)
             }
-            combined = CombinedKeyAndTrustManager(keyManager, trustManager)
-            builder.sslSocketFactory(context.socketFactory, combined)
+            rootCa != null -> {
+                // No client certificate, but the server's CA must be trusted
+                // too — the platform chain validation alone would reject it.
+                val context = SSLContext.getInstance("TLS").apply {
+                    init(null, arrayOf<TrustManager>(trustManager), SecureRandom())
+                }
+                builder.sslSocketFactory(context.socketFactory, trustManager)
+            }
         }
         val client = builder.build()
         cached = fingerprint to client
         combinedManager = combined
+        activeTrustManager = trustManager
         return client
     }
 
@@ -87,6 +102,26 @@ class MtlsOkHttpProvider @Inject constructor(
     @Volatile
     internal var combinedManager: CombinedKeyAndTrustManager? = null
         private set
+
+    /** The trust manager the last [client] rebuild installed; the platform one for a plain client. */
+    @Volatile
+    internal var activeTrustManager: X509TrustManager? = null
+        private set
+
+    private fun trustManagerFor(rootCa: X509Certificate?): X509TrustManager {
+        val platform = platformTrustManager()
+        if (rootCa == null) return platform
+        val caStore = KeyStore.getInstance(KeyStore.getDefaultType()).apply {
+            load(null)
+            setCertificateEntry("norrklang-root-ca", rootCa)
+        }
+        val caManager = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
+            .apply { init(caStore) }
+            .trustManagers
+            .filterIsInstance<X509TrustManager>()
+            .first()
+        return FallbackTrustManager(platform, caManager)
+    }
 
     private var cached: Pair<String?, OkHttpClient>? = null
 
@@ -147,5 +182,29 @@ class MtlsOkHttpProvider @Inject constructor(
             trustManager.checkServerTrusted(chain, authType)
         override fun getAcceptedIssuers(): Array<X509Certificate> =
             trustManager.getAcceptedIssuers()
+    }
+
+    /**
+     * Platform validation first, the user's root CA as a second chance.
+     * Only server chains are extended — client validation keeps the
+     * platform rules, and the CA is a single user-installed certificate.
+     */
+    internal class FallbackTrustManager(
+        private val primary: X509TrustManager,
+        private val fallback: X509TrustManager,
+    ) : X509TrustManager {
+        override fun checkClientTrusted(chain: Array<out X509Certificate>, authType: String) =
+            primary.checkClientTrusted(chain, authType)
+        override fun checkServerTrusted(chain: Array<out X509Certificate>, authType: String) {
+            try {
+                primary.checkServerTrusted(chain, authType)
+            } catch (e: CertificateException) {
+                fallback.checkServerTrusted(chain, authType)
+            }
+        }
+        override fun getAcceptedIssuers(): Array<X509Certificate> =
+            (primary.getAcceptedIssuers().toList() + fallback.getAcceptedIssuers().toList())
+                .distinct()
+                .toTypedArray()
     }
 }

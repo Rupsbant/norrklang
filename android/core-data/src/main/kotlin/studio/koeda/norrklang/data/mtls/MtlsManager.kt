@@ -28,7 +28,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import io.ktor.client.statement.bodyAsBytes
+import org.bouncycastle.asn1.x500.X500Name
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
+import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequestBuilder
 import studio.koeda.norrklang.data.di.ApplicationScope
+import studio.koeda.norrklang.data.di.DeviceName
 import studio.koeda.norrklang.data.settings.ServerSettingsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -40,22 +44,25 @@ import studio.koeda.norrklang.data.diagnostics.Diagnostics
  * [ServerSettingsRepository]) and the certificate the server signs for its
  * public key.
  *
- * The public key leaves the device only as the user hands it over: as a QR
- * code, copied, or via [uploadPublicKey] to the user's own endpoint. The
- * signed certificate comes back via [downloadCertificate] +
- * [installCertificate], which verifies it matches the generated keypair.
+ * The keypair leaves the device only as a PKCS#10 certificate request
+ * (subject: the device name), handed over as a QR code, copied, or via
+ * [uploadCsr] to the user's own endpoint. The server signs the CSR; the
+ * certificate comes back via [downloadCertificate] + [installCertificate],
+ * which verifies it matches the generated keypair.
  */
 @Singleton
 class MtlsManager @Inject constructor(
     private val settings: ServerSettingsRepository,
     @ApplicationScope scope: CoroutineScope,
     private val http: HttpClient = defaultHttp,
+    /** Subject of the CSR (`CN=$deviceName`); injectable for tests. */
+    @DeviceName private val deviceName: String,
 ) {
 
     sealed interface Status {
         data object None : Status
-        data class KeyGenerated(val publicKeyPem: String) : Status
-        data class Ready(val publicKeyPem: String, val certificateSubject: String) : Status
+        data class KeyGenerated(val csrPem: String) : Status
+        data class Ready(val csrPem: String, val certificateSubject: String) : Status
     }
 
     enum class UploadMethod { GET, POST }
@@ -86,9 +93,16 @@ class MtlsManager @Inject constructor(
     var identityNow: MtlsIdentity? = null
         private set
 
+    /** The server's root CA, additionally trusted (see [MtlsOkHttpProvider]). */
+    @Volatile
+    var rootCaNow: X509Certificate? = null
+        private set
+
     val status: Flow<Status> = settings.mtlsMaterial
         .map(::toStatus)
         .distinctUntilChanged()
+
+    val rootCa: Flow<X509Certificate?> = settings.mtlsRootCa
 
     init {
         scope.launch {
@@ -102,17 +116,26 @@ class MtlsManager @Inject constructor(
         }
     }
 
-    /** Reads the identity once from the store; safe to call repeatedly. */
+    /** Reads the identity and the root CA once from the store; safe to call repeatedly. */
     suspend fun ensureLoaded() {
         identityNow = (settings.mtlsMaterial.first() as? MtlsMaterial.Complete)?.identity
+        rootCaNow = settings.mtlsRootCa.first()
     }
 
-    /** The generated public key as an SPKI PEM block, for QR/copy/upload. */
-    fun publicKeyPem(publicKey: PublicKey): String = runCatching {
-        val base64 = Base64.getEncoder().encodeToString(publicKey.encoded)
-        "-----BEGIN PUBLIC KEY-----\n" +
+    /** The PKCS#10 certificate request (subject `CN=$deviceName`) as a PEM block. */
+    fun csrPem(keyPair: KeyPair): String = runCatching {
+        val builder = JcaPKCS10CertificationRequestBuilder(
+            X500Name("CN=$deviceName"),
+            keyPair.public,
+        )
+        // The signer carries the private key; the request is signed with it.
+        val request = builder.build(
+            JcaContentSignerBuilder(SIGNATURE_ALGORITHM).build(keyPair.private),
+        )
+        val base64 = Base64.getEncoder().encodeToString(request.getEncoded())
+        "-----BEGIN CERTIFICATE REQUEST-----\n" +
             base64.chunked(PEM_LINE_LENGTH).joinToString("\n") +
-            "\n-----END PUBLIC KEY-----"
+            "\n-----END CERTIFICATE REQUEST-----"
     }.getOrThrow()
 
     /** The generated public key, before or after signing; null when nothing is generated. */
@@ -169,24 +192,46 @@ class MtlsManager @Inject constructor(
     }
 
     /**
-     * Sends [pem] to the user's upload endpoint. GET: as the `cert` query
-     * parameter (URL-encoded by Ktor); POST: as a `text/plain` body. The
-     * endpoint is user-hosted (the issue leaves its implementation to the
-     * server owner), so only the transport is standardized here.
+     * Parses [data] (DER or PEM) and installs it as a root CA trusted in
+     * addition to the platform set — for servers whose certificate chain
+     * ends at a CA the device does not know.
      */
-    suspend fun uploadPublicKey(
+    suspend fun installRootCa(data: ByteArray): Result<X509Certificate> {
+        val certificate = try {
+            parseCertificate(data)
+        } catch (e: Exception) {
+            return Result.failure(MtlsException(Failure.INVALID_CERTIFICATE))
+        }
+        settings.storeMtlsRootCa(certificate)
+        rootCaNow = certificate
+        return Result.success(certificate)
+    }
+
+    /** Removes the additionally trusted root CA; the next connection trusts the platform set only. */
+    suspend fun removeRootCa() {
+        settings.removeMtlsRootCa()
+        rootCaNow = null
+    }
+
+    /**
+     * Sends the PKCS#10 [csr] (PEM) to the user's upload endpoint. GET: as
+     * the `csr` query parameter (URL-encoded by Ktor); POST: as a `text/plain`
+     * body. The endpoint is user-hosted (the issue leaves its implementation
+     * to the server owner), so only the transport is standardized here.
+     */
+    suspend fun uploadCsr(
         url: String,
         method: UploadMethod,
-        pem: String,
+        csr: String,
     ): UploadResult = withContext(Dispatchers.IO) {
         val response = if (method == UploadMethod.GET) {
-            http.get(url) { parameter("cert", pem) }
+            http.get(url) { parameter("csr", csr) }
         } else {
             http.post(url) {
                 // `setBody` wraps the PEM in a `TextContent` (text/plain); Ktor
                 // drops any manually set Content-Type and the engine takes it
                 // from the body.
-                setBody(pem)
+                setBody(csr)
             }
         }
         UploadResult(response.status.value, response.headers[HttpHeaders.Location])
@@ -211,10 +256,10 @@ class MtlsManager @Inject constructor(
     private fun toStatus(material: MtlsMaterial?): Status = when (material) {
         null -> Status.None
         is MtlsMaterial.KeyPairOnly ->
-            Status.KeyGenerated(publicKeyPem(material.keyPair.public))
+            Status.KeyGenerated(csrPem(material.keyPair))
         is MtlsMaterial.Complete ->
             Status.Ready(
-                publicKeyPem(material.identity.keyPair.public),
+                csrPem(material.identity.keyPair),
                 material.identity.certificate.subjectX500Principal.name,
             )
     }
@@ -242,6 +287,8 @@ class MtlsManager @Inject constructor(
         /** Fixed key length per the feature request: NIST P-256 ECDSA. */
         private const val CURVE_P256 = "secp256r1"
         private const val PEM_LINE_LENGTH = 64
+        /** CSR signature algorithm — supported by every JDK and Android provider. */
+        private const val SIGNATURE_ALGORITHM = "SHA256withECDSA"
 
         private val defaultHttp = HttpClient(OkHttp.create()) {
             install(HttpTimeout) {

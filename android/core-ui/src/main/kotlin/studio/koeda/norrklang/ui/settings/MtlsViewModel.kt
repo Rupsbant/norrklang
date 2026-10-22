@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.security.cert.X509Certificate
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -22,10 +23,10 @@ import studio.koeda.norrklang.data.mtls.MtlsManager.UploadMethod
 import studio.koeda.norrklang.ui.R
 
 /**
- * Drives the mTLS page: generate the keypair, hand the public key to the
- * server (QR, copy, or the upload endpoint), and download the signed
- * certificate. One-shot messages are surfaced as [message] and cleared by
- * the next action.
+ * Drives the mTLS page: generate the keypair, hand the certificate request
+ * (CSR) to the server (QR, copy, or the upload endpoint), and download the
+ * signed certificate. One-shot messages are surfaced as [message] and
+ * cleared by the next action.
  */
 @HiltViewModel
 class MtlsViewModel @Inject constructor(
@@ -57,15 +58,38 @@ class MtlsViewModel @Inject constructor(
         _uploadMethod.value = method
     }
 
+    val rootCa: StateFlow<X509Certificate?> = mtls.rootCa
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    private val _rootCaUrl = MutableStateFlow("")
+    val rootCaUrl: StateFlow<String> = _rootCaUrl.asStateFlow()
+
+    fun setRootCaUrl(value: String) {
+        _rootCaUrl.value = value
+    }
+
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
-    private fun publicKeyPem(): String? = when (val s = status.value) {
-        is Status.KeyGenerated -> s.publicKeyPem
-        is Status.Ready -> s.publicKeyPem
+    /** Raw request/response lines for the upload/download actions, for reading off the car screen. */
+    private val _log = MutableStateFlow("")
+    val log: StateFlow<String> = _log.asStateFlow()
+
+    fun clearLog() {
+        _log.value = ""
+    }
+
+    private fun logLine(text: String) {
+        val next = if (_log.value.isEmpty()) text else "${_log.value}\n$text"
+        _log.value = if (next.length > MAX_LOG_LENGTH) next.takeLast(MAX_LOG_LENGTH) else next
+    }
+
+    private fun csrPem(): String? = when (val s = status.value) {
+        is Status.KeyGenerated -> s.csrPem
+        is Status.Ready -> s.csrPem
         Status.None -> null
     }
 
@@ -80,15 +104,15 @@ class MtlsViewModel @Inject constructor(
         }
     }
 
-    fun copyPublicKey() {
-        val pem = publicKeyPem() ?: return
+    fun copyCsr() {
+        val pem = csrPem() ?: return
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("Norrklang public key", pem))
+        clipboard.setPrimaryClip(ClipData.newPlainText("Norrklang certificate request", pem))
         _message.value = context.getString(R.string.mtls_copied)
     }
 
-    fun uploadPublicKey() {
-        val pem = publicKeyPem()
+    fun uploadCsr() {
+        val pem = csrPem()
         if (pem == null) {
             message(R.string.mtls_need_keypair)
             return
@@ -101,8 +125,12 @@ class MtlsViewModel @Inject constructor(
         viewModelScope.launch {
             _busy.value = true
             _message.value = null
-            runCatching { mtls.uploadPublicKey(url, _uploadMethod.value, pem) }
+            runCatching { mtls.uploadCsr(url, _uploadMethod.value, pem) }
                 .onSuccess { result ->
+                    logLine(
+                        "upload ${_uploadMethod.value.name} $url -> HTTP ${result.status}" +
+                            (result.location?.let { ", Location: $it" } ?: ""),
+                    )
                     if (result.status in 200..299) {
                         result.location?.let { _downloadUrl.value = it }
                         _message.value =
@@ -117,6 +145,7 @@ class MtlsViewModel @Inject constructor(
                     }
                 }
                 .onFailure {
+                    logLine("upload $url -> ${it.message ?: it::class.simpleName}")
                     _message.value = context.getString(R.string.mtls_error_network)
                 }
             _busy.value = false
@@ -124,7 +153,7 @@ class MtlsViewModel @Inject constructor(
     }
 
     fun downloadCertificate() {
-        if (publicKeyPem() == null) {
+        if (csrPem() == null) {
             message(R.string.mtls_need_keypair)
             return
         }
@@ -136,9 +165,21 @@ class MtlsViewModel @Inject constructor(
         viewModelScope.launch {
             _busy.value = true
             _message.value = null
-            runCatching { mtls.installCertificate(mtls.downloadCertificate(url).getOrThrow()) }
+            // installCertificate reports its own failures as a Result —
+            // surface them, don't let a key mismatch read as "installed".
+            val download = mtls.downloadCertificate(url)
+            logLine(
+                "download $url -> " +
+                    download.fold({ "HTTP ok, ${it.size} bytes" }, { it.message ?: "network error" }),
+            )
+            val result = download.fold(
+                onSuccess = { mtls.installCertificate(it) },
+                onFailure = { Result.failure(it) },
+            )
+            result
                 .onSuccess { _message.value = context.getString(R.string.mtls_certificate_installed) }
                 .onFailure { e ->
+                    logLine("install certificate -> ${e.message}")
                     _message.value = when ((e as? MtlsException)?.failure) {
                         Failure.KEY_MISMATCH ->
                             context.getString(R.string.mtls_certificate_mismatch)
@@ -147,6 +188,53 @@ class MtlsViewModel @Inject constructor(
                         else -> context.getString(R.string.mtls_error_network)
                     }
                 }
+            _busy.value = false
+        }
+    }
+
+    fun downloadRootCa() {
+        val url = _rootCaUrl.value.trim()
+        if (url.isEmpty()) {
+            message(R.string.mtls_need_url)
+            return
+        }
+        viewModelScope.launch {
+            _busy.value = true
+            _message.value = null
+            val download = mtls.downloadCertificate(url)
+            logLine(
+                "download CA $url -> " +
+                    download.fold({ "HTTP ok, ${it.size} bytes" }, { it.message ?: "network error" }),
+            )
+            val result = download.fold(
+                onSuccess = { mtls.installRootCa(it) },
+                onFailure = { Result.failure(it) },
+            )
+            result
+                .onSuccess { certificate ->
+                    _message.value = context.getString(
+                        R.string.mtls_root_ca_installed,
+                        certificate.subjectX500Principal.name,
+                    )
+                }
+                .onFailure { e ->
+                    logLine("install root CA -> ${e.message}")
+                    _message.value = when ((e as? MtlsException)?.failure) {
+                        Failure.INVALID_CERTIFICATE ->
+                            context.getString(R.string.mtls_root_ca_invalid)
+                        else -> context.getString(R.string.mtls_error_network)
+                    }
+                }
+            _busy.value = false
+        }
+    }
+
+    fun removeRootCa() {
+        viewModelScope.launch {
+            _busy.value = true
+            runCatching { mtls.removeRootCa() }
+                .onSuccess { _message.value = context.getString(R.string.mtls_root_ca_removed) }
+                .onFailure { _message.value = context.getString(R.string.mtls_error_generic, it.message) }
             _busy.value = false
         }
     }
@@ -163,5 +251,9 @@ class MtlsViewModel @Inject constructor(
 
     private fun message(resId: Int) {
         _message.value = context.getString(resId)
+    }
+
+    companion object {
+        private const val MAX_LOG_LENGTH = 4_000
     }
 }

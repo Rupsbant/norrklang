@@ -1,6 +1,7 @@
 package studio.koeda.norrklang.data.di
 
 import android.content.Context
+import android.os.Build
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.Preferences
@@ -35,6 +36,11 @@ annotation class ApplicationScope
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class AppPackageName
+
+/** The device name (CSR subject) — injectable so mTLS stays JVM-testable. */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class DeviceName
 
 private val Context.norrklangDataStore: DataStore<Preferences> by preferencesDataStore(
     name = "norrklang_settings",
@@ -71,6 +77,10 @@ object DataProvidesModule {
     @AppPackageName
     fun providePackageName(@ApplicationContext context: Context): String =
         context.packageName
+
+    @Provides
+    @DeviceName
+    fun provideDeviceName(): String = Build.MODEL ?: "Norrklang"
 
     @Provides
     @Singleton

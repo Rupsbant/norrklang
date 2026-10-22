@@ -12,19 +12,20 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.OutgoingContent
 import io.ktor.http.headersOf
 import java.io.File
-import java.security.KeyFactory
 import java.security.KeyPairGenerator
 import java.security.spec.ECGenParameterSpec
-import java.security.spec.X509EncodedKeySpec
 import java.util.Base64
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequest
 import org.junit.Rule
 import org.junit.rules.TemporaryFolder
 import studio.koeda.norrklang.data.mtls.MtlsManager.Failure
@@ -48,10 +49,12 @@ class MtlsManagerTest {
     private fun manager(
         scope: CoroutineScope,
         engine: MockEngine,
+        deviceName: String = "Test Device",
     ): MtlsManager = MtlsManager(
         ServerSettingsRepository(dataStore(scope), FakeCipher()),
         scope,
         HttpClient(engine),
+        deviceName,
     )
 
     /** A mock that answers every request; these tests never expect one. */
@@ -63,17 +66,6 @@ class MtlsManagerTest {
         .apply { initialize(ECGenParameterSpec("secp256r1")) }
         .generateKeyPair()
 
-    private fun Status.KeyGenerated.publicKeyPemSpki(): ByteArray =
-        Base64.getDecoder().decode(
-            publicKeyPem
-                .substringAfter("-----BEGIN PUBLIC KEY-----")
-                .substringBefore("-----END PUBLIC KEY-----")
-                .filterNot(Char::isWhitespace),
-        )
-
-    private fun spkiToPublic(spki: ByteArray) =
-        KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(spki))
-
     @Test
     fun `fresh store has no status`() = runTest {
         val mtls = manager(backgroundScope, idleEngine())
@@ -81,16 +73,22 @@ class MtlsManagerTest {
     }
 
     @Test
-    fun `generateKeyPair yields an SPKI PEM public key`() = runTest {
-        val mtls = manager(backgroundScope, idleEngine())
-
+    fun `generateKeyPair yields a PKCS10 CSR named after the device`() = runTest {
+        val mtls = manager(backgroundScope, idleEngine(), deviceName = "Emulator 9")
         mtls.generateKeyPair()
 
         val status = assertIs<Status.KeyGenerated>(mtls.status.first())
-        assertTrue(status.publicKeyPem.startsWith("-----BEGIN PUBLIC KEY-----"))
-        assertTrue(status.publicKeyPem.endsWith("-----END PUBLIC KEY-----"))
-        // The PEM decodes back to a usable public key.
-        spkiToPublic(status.publicKeyPemSpki())
+        assertTrue(status.csrPem.startsWith("-----BEGIN CERTIFICATE REQUEST-----"))
+        assertTrue(status.csrPem.endsWith("-----END CERTIFICATE REQUEST-----"))
+        val der = Base64.getDecoder().decode(
+            status.csrPem
+                .substringAfter("-----BEGIN CERTIFICATE REQUEST-----")
+                .substringBefore("-----END CERTIFICATE REQUEST-----")
+                .filterNot(Char::isWhitespace),
+        )
+        val request = JcaPKCS10CertificationRequest(der)
+        assertEquals("CN=Emulator 9", request.subject.toString())
+        assertContentEquals(mtls.currentPublicKey()!!.encoded, request.publicKey.encoded)
     }
 
     @Test
@@ -156,11 +154,11 @@ class MtlsManagerTest {
     }
 
     @Test
-    fun `GET upload sends the PEM as the cert parameter and reads the Location header`() = runTest {
-        var seenPem: String? = null
+    fun `GET upload sends the CSR as the csr parameter and reads the Location header`() = runTest {
+        var seenCsr: String? = null
         val engine = MockEngine(MockEngineConfig().apply {
             addHandler { request ->
-                seenPem = request.url.parameters["cert"]
+                seenCsr = request.url.parameters["csr"]
                 respond(
                     "ok",
                     HttpStatusCode.Created,
@@ -170,13 +168,13 @@ class MtlsManagerTest {
         })
         val mtls = manager(backgroundScope, engine)
         mtls.generateKeyPair()
-        val pem = (mtls.status.first() as Status.KeyGenerated).publicKeyPem
+        val pem = (mtls.status.first() as Status.KeyGenerated).csrPem
 
-        val result = mtls.uploadPublicKey("https://upload.example/add", UploadMethod.GET, pem)
+        val result = mtls.uploadCsr("https://upload.example/add", UploadMethod.GET, pem)
 
         assertEquals(201, result.status)
         assertEquals("https://cdn.example/cert.pem", result.location)
-        assertEquals(pem, seenPem)
+        assertEquals(pem, seenCsr)
     }
 
     @Test
@@ -196,9 +194,9 @@ class MtlsManagerTest {
         })
         val mtls = manager(backgroundScope, engine)
         mtls.generateKeyPair()
-        val pem = (mtls.status.first() as Status.KeyGenerated).publicKeyPem
+        val pem = (mtls.status.first() as Status.KeyGenerated).csrPem
 
-        val result = mtls.uploadPublicKey("https://upload.example/add", UploadMethod.POST, pem)
+        val result = mtls.uploadCsr("https://upload.example/add", UploadMethod.POST, pem)
 
         assertEquals(200, result.status)
         assertNull(result.location)
@@ -235,5 +233,48 @@ class MtlsManagerTest {
         val result = mtls.downloadCertificate("https://cdn.example/cert.pem")
 
         assertTrue(result.exceptionOrNull() is java.io.IOException)
+    }
+
+    @Test
+    fun `a downloaded root CA is installed and reloads on a fresh manager`() = runTest {
+        val store = dataStore(backgroundScope)
+        val settings = ServerSettingsRepository(store, FakeCipher())
+        val ca = TestCertificates.selfSignedFor(freshKeyPair().public)
+        val engine = MockEngine(MockEngineConfig().apply {
+            addHandler { respond(ca.encoded) }
+        })
+        val mtls = MtlsManager(settings, backgroundScope, HttpClient(engine))
+
+        mtls.installRootCa(mtls.downloadCertificate("https://ca.example/root.pem").getOrThrow())
+            .getOrThrow()
+
+        assertEquals(ca, mtls.rootCa.first())
+        assertEquals(ca, mtls.rootCaNow)
+        val fresh = MtlsManager(settings, backgroundScope, HttpClient(idleEngine()))
+        fresh.ensureLoaded()
+        assertEquals(ca, fresh.rootCaNow)
+    }
+
+    @Test
+    fun `garbage root CA is rejected as not a certificate`() = runTest {
+        val mtls = manager(backgroundScope, idleEngine())
+
+        val result = mtls.installRootCa("not a certificate".toByteArray())
+
+        val failure = assertIs<MtlsException>(result.exceptionOrNull()).failure
+        assertEquals(Failure.INVALID_CERTIFICATE, failure)
+        assertNull(mtls.rootCa.first())
+    }
+
+    @Test
+    fun `removeRootCa clears the trusted CA`() = runTest {
+        val mtls = manager(backgroundScope, idleEngine())
+        mtls.installRootCa(TestCertificates.selfSignedFor(freshKeyPair().public).encoded).getOrThrow()
+        assertNotNull(mtls.rootCa.first())
+
+        mtls.removeRootCa()
+
+        assertNull(mtls.rootCa.first())
+        assertNull(mtls.rootCaNow)
     }
 }

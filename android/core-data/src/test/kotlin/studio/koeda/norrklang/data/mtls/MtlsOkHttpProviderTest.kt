@@ -91,6 +91,40 @@ class MtlsOkHttpProviderTest {
     }
 
     @Test
+    fun `with a root CA the client trusts it alongside the platform set`() = runTest {
+        val settings = ServerSettingsRepository(dataStore(backgroundScope), FakeCipher())
+        val ca = TestCertificates.selfSignedFor(pair().public)
+        settings.storeMtlsRootCa(ca)
+        val mtls = MtlsManager(settings, backgroundScope)
+        mtls.ensureLoaded()
+        val provider = MtlsOkHttpProvider(mtls)
+
+        provider.client()
+
+        assertNull(provider.combinedManager)
+        val trust = assertIs<MtlsOkHttpProvider.FallbackTrustManager>(provider.activeTrustManager)
+        // A chain ending at the user-installed CA validates through the fallback.
+        trust.checkServerTrusted(arrayOf(ca), "RSA")
+        assertTrue(trust.getAcceptedIssuers().any { it == ca })
+    }
+
+    @Test
+    fun `adding a root CA rebuilds the client`() = runTest {
+        val settings = ServerSettingsRepository(dataStore(backgroundScope), FakeCipher())
+        val mtls = MtlsManager(settings, backgroundScope)
+        mtls.ensureLoaded()
+        val provider = MtlsOkHttpProvider(mtls)
+
+        val plain = provider.client()
+
+        mtls.installRootCa(TestCertificates.selfSignedFor(pair().public).encoded).getOrThrow()
+        val withCa = provider.client()
+
+        assertNotSame(plain, withCa)
+        assertIs<MtlsOkHttpProvider.FallbackTrustManager>(provider.activeTrustManager)
+    }
+
+    @Test
     fun `the default engine factory is pointed at the provider`() = runTest {
         val settings = ServerSettingsRepository(dataStore(backgroundScope), FakeCipher())
         val mtls = MtlsManager(settings, backgroundScope)

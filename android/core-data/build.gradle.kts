@@ -31,6 +31,9 @@ dependencies {
     // shared mTLS OkHttp client (MtlsOkHttpProvider).
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.okhttp)
+    // PKCS#10 certificate-request generation for the mTLS upload
+    // (MtlsManager.csrPem); BouncyCastle is the only signer that builds CSRs.
+    implementation(libs.bouncycastle.pkix)
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

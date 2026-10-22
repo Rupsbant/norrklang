@@ -28,6 +28,7 @@ class MtlsPersistenceTest {
     private val privateKeyKey = stringPreferencesKey("mtls_private_key")
     private val publicKeyKey = stringPreferencesKey("mtls_public_key")
     private val certificateKey = stringPreferencesKey("mtls_certificate")
+    private val rootCaKey = stringPreferencesKey("mtls_root_ca")
 
     private fun dataStore(scope: CoroutineScope): DataStore<Preferences> =
         PreferenceDataStoreFactory.create(scope = scope) {
@@ -105,6 +106,29 @@ class MtlsPersistenceTest {
         assertNull(prefs[privateKeyKey])
         assertNull(prefs[publicKeyKey])
         assertNull(prefs[certificateKey])
+    }
+
+    @Test
+    fun `root CA round-trips, survives a sign-out, and is removable`() = runTest {
+        val store = dataStore(backgroundScope)
+        val repo = ServerSettingsRepository(store, FakeCipher())
+        val ca = TestCertificates.selfSignedFor(keyPair().public)
+
+        repo.storeMtlsRootCa(ca)
+
+        assertEquals(ca, repo.mtlsRootCa.first())
+        repo.save(
+            studio.koeda.norrklang.subsonic.SubsonicCredentials.fromInput(
+                "https://music.example.com", "demo", "secret",
+            ),
+        )
+        repo.clearAccount()
+        assertEquals(ca, repo.mtlsRootCa.first())
+
+        repo.removeMtlsRootCa()
+
+        assertNull(repo.mtlsRootCa.first())
+        assertNull(store.data.first()[rootCaKey])
     }
 
     @Test

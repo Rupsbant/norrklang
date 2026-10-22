@@ -138,6 +138,9 @@ class ServerSettingsRepository @Inject constructor(
         val MTLS_PRIVATE_KEY = stringPreferencesKey("mtls_private_key")
         val MTLS_PUBLIC_KEY = stringPreferencesKey("mtls_public_key")
         val MTLS_CERTIFICATE = stringPreferencesKey("mtls_certificate")
+
+        /** The server's root CA, additionally trusted on top of the platform set. */
+        val MTLS_ROOT_CA = stringPreferencesKey("mtls_root_ca")
     }
 
     // flowOn keeps decrypt (Keystore binder IPC + AES) off the collector's
@@ -664,6 +667,33 @@ class ServerSettingsRepository @Inject constructor(
             prefs.remove(Keys.MTLS_PRIVATE_KEY)
             prefs.remove(Keys.MTLS_PUBLIC_KEY)
             prefs.remove(Keys.MTLS_CERTIFICATE)
+        }
+    }
+
+    /**
+     * The root CA [MtlsManager] downloaded for the user (DER, in the clear —
+     * a CA certificate is public data). Device-scoped like the identity.
+     */
+    val mtlsRootCa: Flow<X509Certificate?> =
+        dataStore.data.map { prefs ->
+            prefs[Keys.MTLS_ROOT_CA]?.let(::decodeBase64)?.let { der ->
+                runCatching {
+                    CertificateFactory.getInstance("X.509")
+                        .generateCertificate(ByteArrayInputStream(der)) as X509Certificate
+                }.getOrNull()
+            }
+        }.flowOn(Dispatchers.IO)
+
+    /** Stores the root CA [MtlsManager] parsed from the user's URL. */
+    suspend fun storeMtlsRootCa(certificate: X509Certificate) {
+        dataStore.edit { prefs ->
+            prefs[Keys.MTLS_ROOT_CA] = Base64.getEncoder().encodeToString(certificate.encoded)
+        }
+    }
+
+    suspend fun removeMtlsRootCa() {
+        dataStore.edit { prefs ->
+            prefs.remove(Keys.MTLS_ROOT_CA)
         }
     }
 
