@@ -297,8 +297,11 @@ class SubsonicClient(
         endpoint: String,
         params: List<Pair<String, String>>,
     ): SubsonicResponse {
+        val url = "${credentials.baseUrl}/rest/$endpoint"
+        SubsonicLog.log("GET $url")
+        val start = System.currentTimeMillis()
         val response = try {
-            http.get("${credentials.baseUrl}/rest/$endpoint") {
+            http.get(url) {
                 for ((key, value) in credentials.authParams()) parameter(key, value)
                 parameter("f", "json")
                 for ((key, value) in params) parameter(key, value)
@@ -306,16 +309,20 @@ class SubsonicClient(
         } catch (e: CancellationException) {
             throw e
         } catch (e: IOException) {
+            SubsonicLog.log("GET $url failed: ${causeChain(e)}")
             throw SubsonicException.NetworkError(e)
         } catch (e: URLParserException) {
             // Ktor rejects a malformed (user-typed) baseUrl before any I/O;
             // keep the single-SubsonicException contract on that path too.
+            SubsonicLog.log("GET $url rejected before I/O: ${causeChain(e)}")
             throw SubsonicException.NetworkError(e)
         } catch (e: IllegalArgumentException) {
+            SubsonicLog.log("GET $url rejected before I/O: ${causeChain(e)}")
             throw SubsonicException.NetworkError(e)
         }
 
         if (!response.status.isSuccess()) {
+            SubsonicLog.log("GET $url -> HTTP ${response.status.value} in ${System.currentTimeMillis() - start}ms")
             throw SubsonicException.ServerError(
                 code = null,
                 message = "HTTP ${response.status.value} from ${credentials.baseUrl}",
@@ -327,6 +334,7 @@ class SubsonicClient(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            SubsonicLog.log("GET $url -> unparseable body: ${causeChain(e)}")
             throw SubsonicException.ServerError(
                 code = null,
                 message = "Unexpected response from server — is this a Navidrome/Subsonic URL?",
@@ -336,14 +344,22 @@ class SubsonicClient(
 
         if (body.status != "ok") {
             val error = body.error
+            SubsonicLog.log("GET $url -> Subsonic error ${error?.code}: ${error?.message}")
             throw if (error != null) {
                 SubsonicException.fromErrorCode(error.code, error.message)
             } else {
                 SubsonicException.ServerError(null, "Server reported status '${body.status}'")
             }
         }
+        SubsonicLog.log("GET $url -> ok in ${System.currentTimeMillis() - start}ms")
         return body
     }
+
+    /** `Class: message` per cause level, deepest last — the TLS failure reason is usually at the bottom. */
+    private fun causeChain(e: Throwable): String =
+        generateSequence<Throwable>(e) { it.cause?.takeIf { c -> c !== it } }
+            .take(4)
+            .joinToString(" <- ") { it.javaClass.simpleName + it.message?.let { m -> ": $m" }.orEmpty() }
 
     override fun close() {
         http.close()

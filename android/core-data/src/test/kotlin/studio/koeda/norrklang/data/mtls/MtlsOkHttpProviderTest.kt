@@ -3,6 +3,10 @@ package studio.koeda.norrklang.data.mtls
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.MockEngineConfig
+import io.ktor.client.engine.mock.respond
 import java.io.File
 import java.security.KeyPairGenerator
 import java.security.spec.ECGenParameterSpec
@@ -35,10 +39,15 @@ class MtlsOkHttpProviderTest {
         .apply { initialize(ECGenParameterSpec("secp256r1")) }
         .generateKeyPair()
 
+    /** These tests never make HTTP calls; the engine just needs to exist. */
+    private fun idleHttp() = HttpClient(
+        MockEngine(MockEngineConfig().apply { addHandler { respond("unused") } }),
+    )
+
     @Test
     fun `without an identity the client is the plain default`() = runTest {
         val settings = ServerSettingsRepository(dataStore(backgroundScope), FakeCipher())
-        val mtls = MtlsManager(settings, backgroundScope)
+        val mtls = MtlsManager(settings, backgroundScope, idleHttp(), "Test Device")
         mtls.ensureLoaded()
         val provider = MtlsOkHttpProvider(mtls)
 
@@ -53,7 +62,7 @@ class MtlsOkHttpProviderTest {
         val pair = pair()
         settings.storeMtlsKeyPair(pair)
         settings.storeMtlsCertificate(TestCertificates.selfSignedFor(pair.public))
-        val mtls = MtlsManager(settings, backgroundScope)
+        val mtls = MtlsManager(settings, backgroundScope, idleHttp(), "Test Device")
         mtls.ensureLoaded()
         val provider = MtlsOkHttpProvider(mtls)
 
@@ -76,7 +85,7 @@ class MtlsOkHttpProviderTest {
         val pair = pair()
         settings.storeMtlsKeyPair(pair)
         settings.storeMtlsCertificate(TestCertificates.selfSignedFor(pair.public))
-        val mtls = MtlsManager(settings, backgroundScope)
+        val mtls = MtlsManager(settings, backgroundScope, idleHttp(), "Test Device")
         mtls.ensureLoaded()
         val provider = MtlsOkHttpProvider(mtls)
 
@@ -95,7 +104,7 @@ class MtlsOkHttpProviderTest {
         val settings = ServerSettingsRepository(dataStore(backgroundScope), FakeCipher())
         val ca = TestCertificates.selfSignedFor(pair().public)
         settings.storeMtlsRootCa(ca)
-        val mtls = MtlsManager(settings, backgroundScope)
+        val mtls = MtlsManager(settings, backgroundScope, idleHttp(), "Test Device")
         mtls.ensureLoaded()
         val provider = MtlsOkHttpProvider(mtls)
 
@@ -111,7 +120,7 @@ class MtlsOkHttpProviderTest {
     @Test
     fun `adding a root CA rebuilds the client`() = runTest {
         val settings = ServerSettingsRepository(dataStore(backgroundScope), FakeCipher())
-        val mtls = MtlsManager(settings, backgroundScope)
+        val mtls = MtlsManager(settings, backgroundScope, idleHttp(), "Test Device")
         mtls.ensureLoaded()
         val provider = MtlsOkHttpProvider(mtls)
 
@@ -127,7 +136,7 @@ class MtlsOkHttpProviderTest {
     @Test
     fun `the default engine factory is pointed at the provider`() = runTest {
         val settings = ServerSettingsRepository(dataStore(backgroundScope), FakeCipher())
-        val mtls = MtlsManager(settings, backgroundScope)
+        val mtls = MtlsManager(settings, backgroundScope, idleHttp(), "Test Device")
         mtls.ensureLoaded()
         val provider = MtlsOkHttpProvider(mtls)
 

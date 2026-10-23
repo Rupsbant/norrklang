@@ -2,6 +2,7 @@ package studio.koeda.norrklang.data.di
 
 import android.content.Context
 import android.os.Build
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.Preferences
@@ -27,6 +28,7 @@ import studio.koeda.norrklang.data.repo.MusicRepository
 import studio.koeda.norrklang.data.repo.RoutingMusicRepository
 import studio.koeda.norrklang.data.settings.CredentialCipher
 import studio.koeda.norrklang.data.settings.KeystoreCredentialCipher
+import studio.koeda.norrklang.subsonic.SubsonicLog
 
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
@@ -54,6 +56,13 @@ private val Context.norrklangDataStore: DataStore<Preferences> by preferencesDat
 @Module
 @InstallIn(SingletonComponent::class)
 object DataProvidesModule {
+
+    init {
+        // Route the JVM Subsonic client's transport logs to logcat so an
+        // emulator session shows the real TLS/auth failure, not just the
+        // sanitized UI error. Hilt loads this module at app start.
+        SubsonicLog.writer = { Log.d("NorrklangSubsonic", it) }
+    }
 
     @Provides
     @Singleton

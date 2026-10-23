@@ -1,5 +1,6 @@
 package studio.koeda.norrklang.data.mtls
 
+import android.util.Log
 import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.HttpClientEngineFactory
 import io.ktor.client.engine.okhttp.OkHttp
@@ -42,6 +43,10 @@ class MtlsOkHttpProvider @Inject constructor(
         SubsonicEngineProvider.engineFactory = { _ -> engineFactory }
     }
 
+    private companion object {
+        const val TAG = "NorrklangMtls"
+    }
+
     /** Ktor engine for [SubsonicClient]: the shared (optionally mTLS) OkHttp client. */
     val engineFactory: HttpClientEngineFactory<OkHttpConfig> =
         object : HttpClientEngineFactory<OkHttpConfig> {
@@ -56,6 +61,16 @@ class MtlsOkHttpProvider @Inject constructor(
     fun client(): OkHttpClient {
         val identity = mtls.identityNow
         val rootCa = mtls.rootCaNow
+        runCatching {
+            Log.d(
+                TAG,
+                "transport: " + when {
+                    identity != null -> "mTLS, client cert ${identity.certificate.subjectX500Principal}"
+                    rootCa != null -> "plain TLS + custom root CA ${rootCa.subjectX500Principal}"
+                    else -> "plain TLS, platform trust only"
+                },
+            )
+        }
         val fingerprint = (identity?.fingerprint ?: "none") +
             "/" + (rootCa?.encoded?.joinToString(":") { String.format("%02X", it) } ?: "none")
         cached?.takeIf { it.first == fingerprint }?.let { return it.second }

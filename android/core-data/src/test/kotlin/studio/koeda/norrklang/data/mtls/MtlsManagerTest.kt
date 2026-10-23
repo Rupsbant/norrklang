@@ -243,14 +243,14 @@ class MtlsManagerTest {
         val engine = MockEngine(MockEngineConfig().apply {
             addHandler { respond(ca.encoded) }
         })
-        val mtls = MtlsManager(settings, backgroundScope, HttpClient(engine))
+        val mtls = MtlsManager(settings, backgroundScope, HttpClient(engine), "Test Device")
 
         mtls.installRootCa(mtls.downloadCertificate("https://ca.example/root.pem").getOrThrow())
             .getOrThrow()
 
         assertEquals(ca, mtls.rootCa.first())
         assertEquals(ca, mtls.rootCaNow)
-        val fresh = MtlsManager(settings, backgroundScope, HttpClient(idleEngine()))
+        val fresh = MtlsManager(settings, backgroundScope, HttpClient(idleEngine()), "Test Device")
         fresh.ensureLoaded()
         assertEquals(ca, fresh.rootCaNow)
     }
