@@ -11,6 +11,8 @@ open an issue and ask.
   browse tree, so many ideas are constrained by what the AAOS media template
   allows; agreeing on an approach up front avoids throwaway work.
 - **Security**: never in public issues — see [SECURITY.md](SECURITY.md).
+- **Not a developer?** Testing in a car we don't have and reporting what you
+  see is a real contribution. So is a [tip on Ko-fi](https://ko-fi.com/koedastudio).
 
 ## Building
 

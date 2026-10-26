@@ -121,6 +121,11 @@
   <string name="settings_picker_error">Couldn\'t load from the server</string>
   <string name="settings_picker_retry">Try again</string>
   <string name="settings_privacy_policy">Privacy policy</string>
+  <string name="settings_about">About Norrklang</string>
+  <string name="settings_about_hint">Website, source code and how to get in touch</string>
+  <string name="settings_about_qr_title">Open norrklang.app on your phone</string>
+  <string name="settings_about_qr_hint">Scan with your phone camera. The website has the source code, the changelog and ways to get in touch.</string>
+  <string name="settings_about_license">Free software under GPL-3.0-or-later, by Koeda Studio</string>
   <string name="settings_diagnostics">Diagnostics</string>
   <string name="settings_diagnostics_hint">Recent errors, for troubleshooting</string>
   <string name="settings_diagnostics_empty">No errors recorded. If something goes wrong, details show up here.</string>

@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow semver (`norrklang.version` in `android/gradle.properties`
 is the single source of truth).
 
+## [Unreleased]
+
+### Added
+
+- Settings → About Norrklang: QR code to norrklang.app, with license and
+  source link.
+
 ## [1.4.0] — 2026-10-18
 
 ### Added

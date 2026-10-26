@@ -2,7 +2,7 @@
 import { Image } from 'astro:assets';
 import Base from '../layouts/Base.astro';
 import Mark from '../components/Mark.astro';
-import { GITHUB_URL, LICENSE_URL, PLAY_URL, PUBLISHER, PUBLISHER_URL, TAGLINE } from '../config';
+import { GITHUB_URL, KOFI_URL, LICENSE_URL, PLAY_URL, PUBLISHER, PUBLISHER_URL, TAGLINE } from '../config';
 import carDashboard from '../assets/car-dashboard.png';
 import screenHome from '../assets/screen-home.webp';
 import screenPlayer from '../assets/screen-player.webp';
@@ -224,6 +224,32 @@ const iconPaths: Record<string, string> = {
           website and the release tooling are all <a href={GITHUB_URL}>on GitHub</a>. Bug reports
           and contributions are very welcome.
         </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="support">
+    <div class="wrap">
+      <p class="kicker">Support Norrklang</p>
+      <h2>Enjoying your own music in your car?</h2>
+      <p class="section__prose">
+        Help keep Norrklang free, open source and actively developed. It stays free and fully
+        functional for everyone, whether or not you chip in.
+      </p>
+      <div class="support">
+        <div class="support__card">
+          <h3>Leave a tip</h3>
+          <p>A small thank-you through Ko-fi. No account and no subscription required.</p>
+          <a class="btn btn--primary" href={KOFI_URL}>Tip on Ko-fi</a>
+        </div>
+        <div class="support__card">
+          <h3>Help in other ways</h3>
+          <p>
+            Star the project, report what breaks in your car, or send a pull request — every bit
+            helps as much as a coffee.
+          </p>
+          <a class="btn btn--ghost" href={GITHUB_URL}>Open on GitHub</a>
+        </div>
       </div>
     </div>
   </section>
@@ -541,6 +567,41 @@ const iconPaths: Record<string, string> = {
 
   .promise__col h2 {
     font-size: clamp(1.5rem, 1.2rem + 1.2vw, 2rem);
+  }
+
+  /* --- Support -------------------------------------------------------- */
+
+  .support {
+    margin-top: 2.5rem;
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+  }
+
+  .support__card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    background: linear-gradient(180deg, var(--surface-raised), var(--surface));
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    padding: 1.75rem 1.5rem 1.5rem;
+  }
+
+  .support__card h3 {
+    font-size: 1.125rem;
+    letter-spacing: -0.01em;
+  }
+
+  .support__card p {
+    margin: 0.6rem 0 0;
+    color: var(--text-muted);
+    font-size: 0.9375rem;
+    flex: 1;
+  }
+
+  .support__card .btn {
+    margin-top: 1.5rem;
   }
 
   /* --- Closing CTA ---------------------------------------------------- */

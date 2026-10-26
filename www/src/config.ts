@@ -18,5 +18,7 @@ export const ISSUES_URL = `${GITHUB_URL}/issues`;
 export const SECURITY_URL = `${GITHUB_URL}/blob/main/SECURITY.md`;
 export const LICENSE_URL = `${GITHUB_URL}/blob/main/LICENSE`;
 
+export const KOFI_URL = 'https://ko-fi.com/koedastudio';
+
 export const PUBLISHER = 'Koeda Studio';
 export const PUBLISHER_URL = 'https://koeda.studio';

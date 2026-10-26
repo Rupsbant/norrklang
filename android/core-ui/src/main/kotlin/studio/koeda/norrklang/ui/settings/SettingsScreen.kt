@@ -44,7 +44,7 @@ import studio.koeda.norrklang.ui.theme.LocalFormDimens
  */
 private enum class SettingsPage {
     Main, Libraries, Quality, NowPlaying, ScrobbleExceptions, ScrobbleArtists, ScrobblePlaylists, ScrobbleLibraries,
-    SavedSongs, Diagnostics,
+    SavedSongs, Diagnostics, About,
 }
 
 /**
@@ -99,6 +99,10 @@ fun SettingsScreen(
             onBack = { page = SettingsPage.Main },
             modifier = modifier,
         )
+        return
+    }
+    if (page == SettingsPage.About) {
+        AboutPage(onBack = { page = SettingsPage.Main }, modifier = modifier)
         return
     }
     if (page == SettingsPage.Libraries) {
@@ -274,6 +278,8 @@ fun SettingsScreen(
                     onClick = { page = SettingsPage.NowPlaying },
                 )
                 HorizontalDivider()
+                AboutRow(onClick = { page = SettingsPage.About })
+                HorizontalDivider()
                 PrivacyPolicyRow()
                 HorizontalDivider()
                 DiagnosticsRow(onClick = { page = SettingsPage.Diagnostics })
@@ -307,6 +313,8 @@ fun SettingsScreen(
                     )
                     HorizontalDivider()
                 }
+                AboutRow(onClick = { page = SettingsPage.About })
+                HorizontalDivider()
                 PrivacyPolicyRow()
                 HorizontalDivider()
                 // Reachable signed out too: a failure that signed the user
@@ -392,7 +400,9 @@ private fun ScrobbleExclusionPage(
             )
         }
         SettingsPage.Main, SettingsPage.Libraries, SettingsPage.Quality, SettingsPage.NowPlaying,
-        SettingsPage.ScrobbleExceptions, SettingsPage.SavedSongs, SettingsPage.Diagnostics -> Unit
+        SettingsPage.ScrobbleExceptions, SettingsPage.SavedSongs, SettingsPage.Diagnostics,
+        SettingsPage.About,
+        -> Unit
     }
 }
 
@@ -445,7 +455,13 @@ private fun DiagnosticsPage(
         HorizontalDivider()
         Spacer(Modifier.height(dimens.itemSpacing))
         if (reportUrl != null) {
-            ReportQrSection(reportUrl)
+            // Nothing is sent from the car: the trimmed log rides in the URL
+            // fragment, and norrklang.app/report offers a prefilled GitHub issue.
+            QrLinkSection(
+                url = reportUrl,
+                title = stringResource(R.string.settings_diagnostics_report_title),
+                hint = stringResource(R.string.settings_diagnostics_report_hint),
+            )
             Spacer(Modifier.height(dimens.itemSpacing))
             HorizontalDivider()
             Spacer(Modifier.height(dimens.itemSpacing))
@@ -482,28 +498,79 @@ private fun DiagnosticsPage(
 }
 
 /**
- * The QR hand-off: the phone's camera opens norrklang.app/report with the
- * trimmed log in the URL fragment (nothing is sent from the car; fragments
- * never reach the server), and that page offers a prefilled GitHub issue.
+ * Website pointer. Deliberately says nothing about tips or sponsorship:
+ * Play's payments policy bars in-app calls to action towards outside payment
+ * methods, so the ask lives on norrklang.app only.
  */
 @Composable
-private fun ReportQrSection(reportUrl: String) {
+private fun AboutPage(onBack: () -> Unit, modifier: Modifier = Modifier) {
+    val dimens = LocalFormDimens.current
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = dimens.screenPadding, vertical = dimens.itemSpacing),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            BackButton(onBack)
+            Text(
+                text = stringResource(R.string.settings_about),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+        Spacer(Modifier.height(dimens.itemSpacing))
+        HorizontalDivider()
+        Spacer(Modifier.height(dimens.itemSpacing))
+        QrLinkSection(
+            url = WEBSITE_URL,
+            title = stringResource(R.string.settings_about_qr_title),
+            hint = stringResource(R.string.settings_about_qr_hint),
+        )
+        Spacer(Modifier.height(dimens.itemSpacing))
+        HorizontalDivider()
+        Spacer(Modifier.height(dimens.itemSpacing))
+        Text(
+            text = stringResource(R.string.settings_about_license),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = GITHUB_URL,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(dimens.itemSpacing))
+        VersionFooter()
+        Spacer(Modifier.height(dimens.itemSpacing))
+    }
+}
+
+/**
+ * QR hand-off to the phone's camera, with the URL in the QR only — cars have
+ * no browser to tap through to.
+ */
+@Composable
+private fun QrLinkSection(url: String, title: String, hint: String) {
     val dimens = LocalFormDimens.current
     Row(verticalAlignment = Alignment.CenterVertically) {
         QrCode(
-            content = reportUrl,
-            contentDescription = stringResource(R.string.settings_diagnostics_report_title),
+            content = url,
+            contentDescription = title,
             modifier = Modifier.size(dimens.controlMinHeight * 3),
         )
         Column(modifier = Modifier.padding(start = dimens.itemSpacing)) {
             Text(
-                text = stringResource(R.string.settings_diagnostics_report_title),
+                text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Text(
-                text = stringResource(R.string.settings_diagnostics_report_hint),
+                text = hint,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

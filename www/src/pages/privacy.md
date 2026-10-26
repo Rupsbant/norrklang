@@ -2,7 +2,7 @@
 layout: ../layouts/Legal.astro
 title: Privacy Policy
 description: What Norrklang stores, what it sends, and to whom. No analytics, no third parties.
-effectiveDate: 2026-10-18
+effectiveDate: 2026-10-26
 ---
 
 Norrklang is a music player for [Navidrome](https://www.navidrome.org/) and
@@ -133,7 +133,10 @@ only scripts it runs are on the /report and /songs pages, which decode the link
 you scanned inside your browser and contact no server. It is served by [Cloudflare](https://www.cloudflare.com/privacypolicy/),
 which as the hosting provider processes standard request metadata (such as IP
 address and requested URL) to deliver the site and protect it from abuse.
-Koeda Studio does not collect or retain visitor logs.
+Koeda Studio does not collect or retain visitor logs. The site links to
+[Ko-fi](https://more.ko-fi.com/privacy) and [GitHub](https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement)
+for tips and contributions; anything you do there is governed by their own
+policies, and nothing about it reaches the app or Koeda Studio's servers.
 
 ## Children
 

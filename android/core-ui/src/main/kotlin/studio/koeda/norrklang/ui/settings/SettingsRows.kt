@@ -206,6 +206,16 @@ internal fun ExclusionRow(
     }
 }
 
+/** Navigation row into the website pointer (see AboutPage). */
+@Composable
+internal fun AboutRow(onClick: () -> Unit) {
+    NavigationRow(
+        title = stringResource(R.string.settings_about),
+        subtitle = stringResource(R.string.settings_about_hint),
+        onClick = onClick,
+    )
+}
+
 /** Navigation row into the on-device error log (see DiagnosticsPage). */
 @Composable
 internal fun DiagnosticsRow(onClick: () -> Unit) {
@@ -276,3 +286,8 @@ internal fun VersionFooter(modifier: Modifier = Modifier) {
  * Console listing. Rendered as visible text, so keep it short.
  */
 const val PRIVACY_POLICY_URL = "https://norrklang.app/privacy"
+
+/** Homepage, kept short so the About page's QR stays coarse enough to scan off a car screen. */
+const val WEBSITE_URL = "https://norrklang.app"
+
+const val GITHUB_URL = "https://github.com/koedastudio/norrklang"

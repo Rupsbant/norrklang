@@ -34,8 +34,10 @@ Expect rough edges; please report them.
   6 artists, 6 albums and 8 tracks per query.
 - **Install**: [Google Play](https://play.google.com/store/apps/details?id=studio.koeda.norrklang)
   (Android Automotive OS).
-- **Support**: [GitHub issues](https://github.com/koedastudio/norrklang/issues).
+- **Help**: [GitHub issues](https://github.com/koedastudio/norrklang/issues).
 - **Website**: [norrklang.app](https://norrklang.app).
+- **Support the project**: [tip on Ko-fi](https://ko-fi.com/koedastudio) —
+  see [Support the project](#support-the-project).
 - **Privacy**: [privacy policy](https://norrklang.app/privacy) — no analytics,
   no third parties; the app talks only to your server.
 - **License**: [GPL-3.0-or-later](LICENSE) — the same license as Navidrome and
@@ -154,6 +156,14 @@ with the same instructions.
    "Something went wrong" dialog in cars that wake up offline), and the
    bundle goes to the **Android Automotive OS** form factor of the single
    `studio.koeda.norrklang` listing.
+
+## Support the project
+
+Norrklang is free and will stay free and fully functional for everyone. If
+it makes your drives better and you want to say thanks, you can
+[leave a tip on Ko-fi](https://ko-fi.com/koedastudio) — or star the repo,
+report what breaks in your car, and send pull requests, which help just as
+much. Details on [norrklang.app](https://norrklang.app/#support).
 
 ## Contributing
 
