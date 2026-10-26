@@ -1,5 +1,7 @@
 # Norrklang
 
+[![Support Norrklang on Ko-fi](https://img.shields.io/badge/Support_on-Ko--fi-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/koedastudio)
+
 A family of music clients for self-hosted music — [Navidrome](https://www.navidrome.org/), other Subsonic-compatible servers, [Plex](https://www.plex.tv/), and [Jellyfin](https://jellyfin.org/).
 
 The first project is a **car media app** for **Android Automotive OS** — it runs natively in cars like the Polestar 2.

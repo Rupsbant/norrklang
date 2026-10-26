@@ -237,6 +237,9 @@ hr {
 }
 
 .site-nav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   color: var(--text-muted);
   text-decoration: none;
   transition: color 140ms ease;
@@ -246,11 +249,22 @@ hr {
   color: var(--text);
 }
 
-/* The in-page anchors are the ones to lose on a narrow viewport — on a phone
-   you just scroll — while Privacy has to stay reachable from every page
-   because the Play listing points at it. */
+.site-nav svg {
+  width: 1.05em;
+  height: 1.05em;
+  flex: none;
+}
+
+/* Discreet on purpose: the Play button stays the page's one loud call to action. */
+.site-nav__support svg {
+  color: var(--accent);
+}
+
+/* Features/Requirements go on a narrow viewport — on a phone you just scroll.
+   Support stays so the tips section is one tap away from every page. */
 @media (max-width: 38rem) {
-  .site-nav__section {
+  /* Scoped to outrank `.site-nav a`'s inline-flex. */
+  .site-nav .site-nav__section {
     display: none;
   }
 }
